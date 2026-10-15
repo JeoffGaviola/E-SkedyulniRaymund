@@ -71,7 +71,9 @@ type FigmaSiteConfiguration = {
   }
 }
 
-const siteConfiguration: FigmaSiteConfiguration = {}
+const siteConfiguration: FigmaSiteConfiguration = {
+  title: "E-Skedyul — Parish & Ministry Scheduler",
+}
 
 /** Applies /.figma/make/site.json to the generated document shell. */
 function figmaSiteConfiguration(config: FigmaSiteConfiguration): Plugin {

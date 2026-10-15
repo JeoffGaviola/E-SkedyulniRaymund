@@ -245,11 +245,11 @@ function AppContent() {
       return (
         <TellNameScreen
           firstName={
-            wizard.firstName || auth.profile?.fullName.split(" ")[0] || ""
+            wizard.firstName || auth.profile?.fullName?.split(" ")[0] || ""
           }
           lastName={
             wizard.lastName ||
-            auth.profile?.fullName.split(" ").slice(1).join(" ") ||
+            auth.profile?.fullName?.split(" ").slice(1).join(" ") ||
             ""
           }
           setFirstName={wizard.setFirstName}
@@ -257,10 +257,10 @@ function AppContent() {
           onBack={() => go("welcome")}
           onContinue={() => {
             const first =
-              wizard.firstName || auth.profile?.fullName.split(" ")[0] || ""
+              wizard.firstName || auth.profile?.fullName?.split(" ")[0] || ""
             const last =
               wizard.lastName ||
-              auth.profile?.fullName.split(" ").slice(1).join(" ") ||
+              auth.profile?.fullName?.split(" ").slice(1).join(" ") ||
               ""
             const fullName = `${first} ${last}`.trim()
             wizard.updateForm({ name: fullName })
@@ -417,7 +417,8 @@ function AppContent() {
 
     // ─── Open Slots ───────────────────────────────────────────────────────────
     case "slot-volunteer":
-      return slots.activeSlot ? (
+      if (!slots.activeSlot) { go("home"); return null }
+      return (
         <SlotVolunteerScreen
           slot={slots.activeSlot}
           onVolunteer={() => {
@@ -426,10 +427,11 @@ function AppContent() {
           }}
           onBack={() => go("home")}
         />
-      ) : null
+      )
 
     case "slot-serving":
-      return slots.activeSlot ? (
+      if (!slots.activeSlot) { go("home"); return null }
+      return (
         <SlotServingScreen
           slot={slots.activeSlot}
           onCancelSpot={() => {
@@ -438,7 +440,7 @@ function AppContent() {
           }}
           onBack={() => go("home")}
         />
-      ) : null
+      )
 
     case "slot-filled":
       return <SlotFilledScreen onSeeOthers={() => go("home")} />
