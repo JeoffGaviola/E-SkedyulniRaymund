@@ -24,6 +24,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("welcome")
   const [prevScreen, setPrevScreen] = useState<Screen>("welcome")
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
+  const [dashboardReturnScreen, setDashboardReturnScreen] = useState<"home" | "admin">("home")
 
   const [homeTab, setHomeTab] = useState<HomeTab>("availability")
   const [ministry, setMinistry] = useState(MINISTRIES[0])
@@ -55,9 +56,61 @@ export default function App() {
   screenRef.current = screen
   const prevScreenRef = useRef(prevScreen)
   prevScreenRef.current = prevScreen
+  const dashboardReturnScreenRef = useRef(dashboardReturnScreen)
+  dashboardReturnScreenRef.current = dashboardReturnScreen
   const goRef = useRef(go)
   goRef.current = go
-  useEffect(() => listenForBackButton(BACK_TARGETS, () => screenRef.current, () => prevScreenRef.current, to => goRef.current(to)), [])
+  useEffect(() => listenForBackButton(BACK_TARGETS, () => screenRef.current, () => prevScreenRef.current, to => {
+    const current = screenRef.current
+    if (current === "set-recurring" || current === "add-override" || current.startsWith("slot-")) {
+      goRef.current(dashboardReturnScreenRef.current)
+      return
+    }
+    goRef.current(to)
+  }), [])
+
+  function renderMemberDashboard(embedded = false) {
+    return (
+      <HomeScreen
+        userName={wizard.form.name || "Maria Santos"}
+        ministry={ministry}
+        onMinistryChange={setMinistry}
+        tab={homeTab}
+        onTabChange={setHomeTab}
+        onJoin={() => go("join-group")}
+        embedded={embedded}
+      >
+        {homeTab === "availability" ? (
+          <AvailabilityTab
+            recurringEntries={availability.recurringEntries}
+            overrides={availability.overrides}
+            slots={slots.slots}
+            onViewSlot={slot => {
+              slots.setActiveSlot(slot)
+              setDashboardReturnScreen(embedded ? "admin" : "home")
+              go("slot-serving")
+            }}
+            position={availability.timetablePosition}
+            onPositionChange={availability.changePosition}
+            onAddRecurring={() => { availability.startRecurring(); setDashboardReturnScreen(embedded ? "admin" : "home"); go("set-recurring") }}
+            onAddOverride={() => { availability.startOverride(); setDashboardReturnScreen(embedded ? "admin" : "home"); go("add-override") }}
+            onEditRecurring={e => { availability.startRecurring(e); setDashboardReturnScreen(embedded ? "admin" : "home"); go("set-recurring") }}
+            onEditOverride={e => { availability.startOverride(e); setDashboardReturnScreen(embedded ? "admin" : "home"); go("add-override") }}
+            onRemoveRecurring={availability.removeRecurring}
+            onRemoveOverride={availability.removeOverride}
+          />
+        ) : (
+          <SlotList
+            slots={slots.slots}
+            onSlotTap={slot => {
+              setDashboardReturnScreen(embedded ? "admin" : "home")
+              go(slots.openSlot(slot))
+            }}
+          />
+        )}
+      </HomeScreen>
+    )
+  }
 
   switch (screen) {
     // ─── Wizard ───────────────────────────────────────────────────────────────
@@ -78,6 +131,7 @@ export default function App() {
     case "admin":
       return adminAuthenticated ? (
         <AdminScreen
+          memberDashboard={renderMemberDashboard(true)}
           onLogout={() => {
             setAdminAuthenticated(false)
             go("welcome")
@@ -126,43 +180,15 @@ export default function App() {
 
     // ─── Home (holds the Availability and Open Slots tabs) ────────────────────
     case "home":
-      return (
-        <HomeScreen
-          userName={wizard.form.name || "Maria Santos"}
-          ministry={ministry}
-          onMinistryChange={setMinistry}
-          tab={homeTab}
-          onTabChange={setHomeTab}
-          onJoin={() => go("join-group")}
-        >
-          {homeTab === "availability" ? (
-            <AvailabilityTab
-              recurringEntries={availability.recurringEntries}
-              overrides={availability.overrides}
-              slots={slots.slots}
-              onViewSlot={slot => { slots.setActiveSlot(slot); go("slot-serving") }}
-              position={availability.timetablePosition}
-              onPositionChange={availability.changePosition}
-              onAddRecurring={() => { availability.startRecurring(); go("set-recurring") }}
-              onAddOverride={() => { availability.startOverride(); go("add-override") }}
-              onEditRecurring={e => { availability.startRecurring(e); go("set-recurring") }}
-              onEditOverride={e => { availability.startOverride(e); go("add-override") }}
-              onRemoveRecurring={availability.removeRecurring}
-              onRemoveOverride={availability.removeOverride}
-            />
-          ) : (
-            <SlotList slots={slots.slots} onSlotTap={slot => go(slots.openSlot(slot))} />
-          )}
-        </HomeScreen>
-      )
+      return renderMemberDashboard()
 
     // ─── Availability ─────────────────────────────────────────────────────────
     case "set-recurring":
       return (
         <SetRecurringScreen
           initial={availability.editingRecurring}
-          onSave={entry => { availability.saveRecurring(entry); go("home") }}
-          onBack={() => go("home")}
+          onSave={entry => { availability.saveRecurring(entry); go(dashboardReturnScreen) }}
+          onBack={() => go(dashboardReturnScreen)}
         />
       )
 
@@ -170,8 +196,8 @@ export default function App() {
       return (
         <AddOverrideScreen
           initial={availability.editingOverride}
-          onSave={entry => { availability.saveOverride(entry); go("home") }}
-          onBack={() => go("home")}
+          onSave={entry => { availability.saveOverride(entry); go(dashboardReturnScreen) }}
+          onBack={() => go(dashboardReturnScreen)}
         />
       )
 
@@ -181,7 +207,7 @@ export default function App() {
         <SlotVolunteerScreen
           slot={slots.activeSlot}
           onVolunteer={() => { slots.volunteer(); go("slot-serving") }}
-          onBack={() => go("home")}
+          onBack={() => go(dashboardReturnScreen)}
         />
       ) : null
 
@@ -189,12 +215,12 @@ export default function App() {
       return slots.activeSlot ? (
         <SlotServingScreen
           slot={slots.activeSlot}
-          onCancelSpot={() => { slots.cancelSpot(); go("home") }}
-          onBack={() => go("home")}
+          onCancelSpot={() => { slots.cancelSpot(); go(dashboardReturnScreen) }}
+          onBack={() => go(dashboardReturnScreen)}
         />
       ) : null
 
     case "slot-filled":
-      return <SlotFilledScreen onSeeOthers={() => go("home")} />
+      return <SlotFilledScreen onSeeOthers={() => go(dashboardReturnScreen)} />
   }
 }
