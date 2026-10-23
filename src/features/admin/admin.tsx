@@ -11,7 +11,7 @@ import type {
   Recurrence,
 } from "./types"
 
-type AdminSection = "dashboard" | "organizations" | "events"
+export type AdminSection = "dashboard" | "organizations" | "events"
 type AdminView =
   | { name: "section"; section: AdminSection }
   | { name: "organization"; id: string }
@@ -127,11 +127,10 @@ function EmptyState({ title, detail, action }: { title: string; detail: string; 
   )
 }
 
-function Dashboard({ admin, onOrganizations, onEvents, onCreateEvent }: {
+function Dashboard({ admin, onEvents, memberDashboard }: {
   admin: ReturnType<typeof useAdmin>
-  onOrganizations: () => void
   onEvents: () => void
-  onCreateEvent: () => void
+  memberDashboard: React.ReactNode
 }) {
   const nextEvents = admin.events
     .filter(event => event.status === "published")
@@ -141,9 +140,8 @@ function Dashboard({ admin, onOrganizations, onEvents, onCreateEvent }: {
   return (
     <div className="space-y-7">
       <AdminHeader
-        title="Admin overview"
-        description="Manage organizations and events from one clear workspace."
-        action={<Button fullWidth={false} size="compact" onClick={onCreateEvent}>Create event</Button>}
+        title="Dashboard"
+        description="Manage your organizations and events, and join upcoming schedules."
       />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MetricCard label="Active organizations" value={admin.metrics.activeOrganizations} detail="Ready to publish events" />
@@ -151,40 +149,36 @@ function Dashboard({ admin, onOrganizations, onEvents, onCreateEvent }: {
         <MetricCard label="Upcoming" value={admin.metrics.upcomingEvents} detail="Scheduled ahead" />
         <MetricCard label="Drafts" value={admin.metrics.draftEvents} detail="Waiting for review" />
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-white p-5 shadow-sm xl:col-span-2">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xl font-bold text-text">Upcoming events</p>
-              <p className="mt-1 text-sm text-muted">The next published activities across organizations.</p>
-            </div>
-            <Button variant="ghost" size="compact" fullWidth={false} onClick={onEvents} className="shrink-0 whitespace-nowrap">View all</Button>
+      <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xl font-bold text-text">Upcoming events</p>
+            <p className="mt-1 text-sm text-muted">The next published activities across organizations.</p>
           </div>
-          <div className="divide-y divide-border">
-            {nextEvents.map(event => {
-              const organization = admin.organizations.find(item => item.id === event.organizationId)
-              return (
-                <div key={event.id} className="flex items-center justify-between gap-4 py-4">
-                  <div className="min-w-0">
-                    <p className="truncate font-bold text-text">{event.title}</p>
-                    <p className="mt-1 text-sm text-muted">{organization?.name} · {formatDateTime(event.startsAt)}</p>
-                  </div>
-                  <StatusBadge status={event.status} />
-                </div>
-              )
-            })}
-          </div>
+          <Button variant="ghost" size="compact" fullWidth={false} onClick={onEvents} className="shrink-0 whitespace-nowrap">View all</Button>
         </div>
-        <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
-          <p className="text-xl font-bold text-text">Quick actions</p>
-          <p className="mt-1 text-sm text-muted">Go directly to common admin tasks.</p>
-          <div className="mt-5 flex flex-col gap-3">
-            <Button variant="secondary" onClick={onOrganizations}>Manage organizations</Button>
-            <Button variant="secondary" onClick={onEvents}>Review event calendar</Button>
-            <Button onClick={onCreateEvent}>Create a new event</Button>
-          </div>
+        <div className="divide-y divide-border">
+          {nextEvents.map(event => {
+            const organization = admin.organizations.find(item => item.id === event.organizationId)
+            return (
+              <div key={event.id} className="flex items-center justify-between gap-4 py-4">
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-text">{event.title}</p>
+                  <p className="mt-1 text-sm text-muted">{organization?.name} · {formatDateTime(event.startsAt)}</p>
+                </div>
+                <StatusBadge status={event.status} />
+              </div>
+            )
+          })}
         </div>
       </div>
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-xl font-bold text-navy">Join a schedule</h2>
+          <p className="mt-1 text-sm text-muted">Check your availability or volunteer for an open slot.</p>
+        </div>
+      {memberDashboard}
+      </section>
     </div>
   )
 }
@@ -646,7 +640,10 @@ function EventForm({ initial, organizationId, admin, onCancel, onSaved }: {
   )
 }
 
-export function AdminScreen({ onLogout }: { onLogout: () => void }) {
+export function AdminScreen({ onLogout, memberDashboard }: {
+  onLogout: () => void
+  memberDashboard: React.ReactNode
+}) {
   const admin = useAdmin()
   const [view, setView] = useState<AdminView>({ name: "section", section: "dashboard" })
 
@@ -701,9 +698,8 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
     content = (
       <Dashboard
         admin={admin}
-        onOrganizations={() => openSection("organizations")}
         onEvents={() => openSection("events")}
-        onCreateEvent={() => setView({ name: "event-form" })}
+        memberDashboard={memberDashboard}
       />
     )
   } else if (view.section === "organizations") {
@@ -743,7 +739,7 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
                 variant="ghost"
                 fullWidth
                 onClick={() => openSection(section)}
-                className={`justify-start capitalize ${activeSection === section ? "bg-white text-navy" : "text-white hover:bg-white/10"}`}
+                className={`justify-start ${activeSection === section ? "bg-white text-navy" : "text-white hover:bg-white/10"}`}
               >
                 {section}
               </Button>
@@ -768,7 +764,7 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
             fullWidth
             onClick={() => openSection(section)}
             ariaPressed={activeSection === section}
-            className={`min-h-12 rounded-2xl px-2 text-sm capitalize ${
+            className={`min-h-12 rounded-2xl px-1 text-xs capitalize sm:px-2 sm:text-sm ${
               activeSection === section
                 ? "bg-navy/10 text-navy shadow-sm ring-1 ring-navy/15"
                 : "text-muted hover:bg-bg hover:text-navy"

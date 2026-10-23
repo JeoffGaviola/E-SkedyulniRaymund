@@ -66,7 +66,7 @@ function greeting() {
   return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
 }
 
-export function HomeScreen({ userName, ministry, onMinistryChange, tab, onTabChange, onJoin, children }: {
+export function HomeScreen({ userName, ministry, onMinistryChange, tab, onTabChange, onJoin, children, embedded = false }: {
   userName: string
   ministry: Ministry
   onMinistryChange: (ministry: Ministry) => void
@@ -74,6 +74,7 @@ export function HomeScreen({ userName, ministry, onMinistryChange, tab, onTabCha
   onTabChange: (tab: HomeTab) => void
   onJoin: () => void
   children: React.ReactNode // the open tab's content
+  embedded?: boolean
 }) {
   const [showMinistries, setShowMinistries] = useState(false)
   // The Availability tab holds the weekly timetable, so it gets the wide layout.
@@ -85,14 +86,16 @@ export function HomeScreen({ userName, ministry, onMinistryChange, tab, onTabCha
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB]" style={{ paddingBottom: "calc(7rem + env(safe-area-inset-bottom))" }}>
-      <div className="bg-[#1B3A6B] px-4 pb-5 text-white" style={{ paddingTop: "calc(2.5rem + env(safe-area-inset-top))" }}>
+    <div className={`${embedded ? "" : "min-h-screen bg-[#F4F6FB]"}`} style={{ paddingBottom: embedded ? undefined : "calc(7rem + env(safe-area-inset-bottom))" }}>
+      <div className={embedded ? "mb-5" : "bg-[#1B3A6B] px-4 pb-5 text-white"} style={embedded ? undefined : { paddingTop: "calc(2.5rem + env(safe-area-inset-top))" }}>
         <div className={`mx-auto ${wide ? "max-w-6xl" : "max-w-3xl"}`}>
+          {!embedded && (
           <div className="mb-4">
             <p className="text-[16px] text-white/70">{greeting()}, {userName.split(" ")[0]}</p>
             <p className="text-xl font-bold">E-Skedyul</p>
           </div>
-          <button onClick={() => setShowMinistries(true)} className="flex min-h-[64px] w-full items-center justify-between rounded-2xl bg-white px-5 text-left text-[#1B3A6B] shadow-sm">
+          )}
+          <button onClick={() => setShowMinistries(true)} className={`flex min-h-[64px] w-full items-center justify-between rounded-2xl px-5 text-left shadow-sm ${embedded ? "border border-border bg-white text-navy" : "bg-white text-[#1B3A6B]"}`}>
             <div>
               <p className="text-[14px] font-semibold text-[#64748B]">Current ministry</p>
               <p className="text-xl font-extrabold">{ministry.name} ▾</p>
@@ -101,11 +104,14 @@ export function HomeScreen({ userName, ministry, onMinistryChange, tab, onTabCha
         </div>
       </div>
 
-      <main className={`mx-auto px-4 py-5 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>
+      <main className={embedded ? "" : `mx-auto px-4 py-5 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>
         {children}
       </main>
 
-      <nav className="fixed left-3 right-3 z-30 mx-auto grid max-w-3xl grid-cols-2 gap-1 rounded-3xl border border-white/70 bg-white/60 p-2 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_10px_30px_rgba(27,58,107,0.18)]" style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
+      <nav
+        className={`${embedded ? "mx-auto w-full" : "fixed bottom-3 left-3 right-3 z-30"} grid max-w-3xl grid-cols-2 gap-1 rounded-3xl border border-white/70 bg-white/60 p-2 backdrop-blur-xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_10px_30px_rgba(27,58,107,0.18)]`}
+        style={embedded ? undefined : { bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+      >
         {([
           ["availability", "Availability"],
           ["slots", "Open Slots"],
