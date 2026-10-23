@@ -72,18 +72,18 @@ function DesktopFormPanel({ children }: { children: React.ReactNode }) {
 // ─── Desktop Wizard Screens ───────────────────────────────────────────────────
 
 export function DesktopJoinGroupScreen({ data, setData, onJoin, onBack }: {
-  data: FormData; setData: (d: Partial<FormData>) => void; onJoin: (groupName?: string) => void; onBack: () => void
+  data: FormData; setData: (d: Partial<FormData>) => void; onJoin: () => void; onBack: () => void
 }) {
   const [error, setError] = useState("")
   const [pasteMode, setPasteMode] = useState(false)
   const [pasteLink, setPasteLink] = useState("")
 
   function handleJoin() {
-    const code = pasteMode ? (pasteLink.split("/").filter(Boolean).pop() || "").toUpperCase().trim() : data.groupCode.trim().toUpperCase()
+    const code = pasteMode ? (pasteLink.split("/").pop() || "").toUpperCase().trim() : data.groupCode.trim().toUpperCase()
     if (!code) { setError("Please enter a group code to continue."); return }
     const groupName = EXAMPLE_GROUPS[code]
     if (!groupName) { setError("We couldn't find a group with that code. Please check with your group leader and try again."); return }
-    setData({ groupCode: code, groupName }); setError(""); onJoin(groupName)
+    setData({ groupCode: code, groupName }); setError(""); onJoin()
   }
 
   return (

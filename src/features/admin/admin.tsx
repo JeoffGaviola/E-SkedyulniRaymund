@@ -48,15 +48,13 @@ function emptyEvent(organizationId: string): EventDraft {
 
 function formatDateTime(value: string) {
   if (!value) return "Not set"
-  const d = new Date(value)
-  if (isNaN(d.getTime())) return "Invalid date"
   return new Intl.DateTimeFormat("en-PH", {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(d)
+  }).format(new Date(value))
 }
 
 function StatusBadge({ status }: { status: OrganizationStatus | EventStatus }) {
@@ -311,7 +309,7 @@ function OrganizationDetails({ organization, admin, onBack, onEdit, onCreateEven
       <Button variant="ghost" size="compact" fullWidth={false} onClick={onBack}>Back to organizations</Button>
       <AdminHeader
         title={organization.name}
-        description={`${organization.category} · Created ${(() => { const d = new Date(organization.createdAt); return isNaN(d.getTime()) ? "Unknown" : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(d) })()}`}
+        description={`${organization.category} · Created ${new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(new Date(organization.createdAt))}`}
         action={<StatusBadge status={organization.status} />}
       />
       <div className="grid gap-6 lg:grid-cols-3">
@@ -603,7 +601,7 @@ function EventForm({ initial, organizationId, admin, onCancel, onSaved }: {
           <InputField id="event-start" type="datetime-local" label="Starts" value={form.startsAt} onChange={value => update("startsAt", value)} />
           <InputField id="event-end" type="datetime-local" label="Ends" value={form.endsAt} onChange={value => update("endsAt", value)} />
           <InputField id="event-location" label="Location" value={form.location} onChange={value => update("location", value)} placeholder="Venue or meeting link" />
-          <InputField id="event-capacity" type="number" label="Maximum attendees" value={String(form.capacity || "")} onChange={value => update("capacity", value === "" ? 0 : Number(value))} />
+          <InputField id="event-capacity" type="number" label="Maximum attendees" value={String(form.capacity)} onChange={value => update("capacity", Number(value))} />
           <InputField id="registration-deadline" type="datetime-local" label="Registration deadline" value={form.registrationDeadline} onChange={value => update("registrationDeadline", value)} helper="Optional. Must be before the event starts." />
           <div>
             <p className="mb-2 text-sm font-semibold text-text">Visibility</p>
@@ -687,12 +685,7 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
         onEdit={() => setView({ name: "organization-form", id: organization.id })}
         onCreateEvent={() => setView({ name: "event-form", organizationId: organization.id })}
       />
-    ) : (
-      <div className="space-y-6">
-        <Button variant="ghost" size="compact" fullWidth={false} onClick={() => openSection("organizations")}>Back to organizations</Button>
-        <EmptyState title="Organization not found" detail="This organization may have been deleted or is no longer available." />
-      </div>
-    )
+    ) : null
   } else if (view.name === "event-form") {
     const initial = view.id ? admin.events.find(event => event.id === view.id) : undefined
     content = (
