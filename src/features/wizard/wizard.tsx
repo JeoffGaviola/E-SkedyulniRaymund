@@ -3,19 +3,7 @@ import type { FormData } from "./types"
 import { ScreenShell, Card, Logo, Button, InputField, BackButton, ClockIcon } from "../../shared/ui"
 import { EXAMPLE_GROUPS, PENDING_STEPS } from "./data"
 
-export function WelcomeScreen({
-  onStart,
-  onSignUp,
-  onSignIn,
-  onAdmin,
-}: {
-  onStart?: () => void
-  onSignUp?: () => void
-  onSignIn: () => void
-  onAdmin: () => void
-}) {
-  const handleSignUp = onSignUp || onStart
-
+export function WelcomeScreen({ onStart, onAdmin }: { onStart: () => void; onAdmin: () => void }) {
   return (
     <ScreenShell>
       <div className="mt-16 flex flex-col items-center gap-10">
@@ -39,9 +27,8 @@ export function WelcomeScreen({
           <p className="text-xl font-semibold leading-relaxed text-[#1A202C]">Share when you're available and volunteer when your ministry needs help.</p>
         </div>
 
-        <div className="flex w-full flex-col items-center gap-3">
-          <Button onClick={onSignIn} variant="primary">Sign In</Button>
-          <Button onClick={handleSignUp} variant="secondary">Create Account / Join</Button>
+        <div className="flex w-full flex-col items-center gap-4">
+          <Button onClick={onStart}>Get Started</Button>
           <Button onClick={onAdmin} variant="ghost">Sign in as Admin</Button>
         </div>
       </div>
@@ -49,13 +36,12 @@ export function WelcomeScreen({
   )
 }
 
-export function TellNameScreen({ firstName, lastName, setFirstName, setLastName, onContinue, onBack }: {
+export function TellNameScreen({ firstName, lastName, setFirstName, setLastName, onContinue }: {
   firstName: string
   lastName: string
   setFirstName: (value: string) => void
   setLastName: (value: string) => void
   onContinue: () => void
-  onBack?: () => void
 }) {
   const [error, setError] = useState("")
 
@@ -70,7 +56,6 @@ export function TellNameScreen({ firstName, lastName, setFirstName, setLastName,
 
   return (
     <ScreenShell>
-      {onBack && <BackButton onClick={onBack} />}
       <div className="mb-8 flex justify-center"><Logo size="md" /></div>
       <Card>
         <p className="text-2xl font-bold text-[#1B3A6B]">Tell us your name</p>
@@ -89,7 +74,7 @@ export function TellNameScreen({ firstName, lastName, setFirstName, setLastName,
 export function JoinGroupScreen({
   data, setData, onJoin, onBack,
 }: {
-  data: FormData; setData: (d: Partial<FormData>) => void; onJoin: (groupName?: string) => void; onBack: () => void
+  data: FormData; setData: (d: Partial<FormData>) => void; onJoin: () => void; onBack: () => void
 }) {
   const [error, setError] = useState("")
   const [pasteMode, setPasteMode] = useState(false)
@@ -97,12 +82,12 @@ export function JoinGroupScreen({
 
   function handleJoin() {
     const code = pasteMode
-      ? (pasteLink.split("/").filter(Boolean).pop() || "").toUpperCase().trim()
+      ? (pasteLink.split("/").pop() || "").toUpperCase().trim()
       : data.groupCode.trim().toUpperCase()
     if (!code) { setError("Please enter a group code to continue."); return }
     const groupName = EXAMPLE_GROUPS[code]
     if (!groupName) { setError("We couldn't find a group with that code. Please check with your group leader and try again."); return }
-    setData({ groupCode: code, groupName }); setError(""); onJoin(groupName)
+    setData({ groupCode: code, groupName }); setError(""); onJoin()
   }
 
   return (
