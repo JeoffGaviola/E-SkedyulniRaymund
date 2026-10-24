@@ -1147,7 +1147,7 @@ export function AdminScreen({ onLogout, memberDashboard }: { onLogout: () => voi
                 : "text-muted hover:bg-bg hover:text-navy"
             }`}
           >
-            {section === "join-requests" ? "Requests" : section === "join" ? "Join" : section}
+            {section === "join-requests" ? "Requests" : section}
           </Button>
         ))}
       </nav>
