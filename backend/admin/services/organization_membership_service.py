@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..core.errors import ConflictError
+from ..core.errors import ConflictError, NotFoundError
 from ..models.admin_profile import AdminProfile
 from ..models.organization import Organization
 from ..models.organization_membership import OrganizationMembership
@@ -14,7 +14,7 @@ from ..repositories.organization_repository import OrganizationRepository
 
 
 class OrganizationMembershipService:
-    """Membership operations for administrator accounts."""
+    """Membership and assignment operations for administrator accounts."""
 
     def __init__(self, session: Session):
         self.session = session
@@ -76,6 +76,30 @@ class OrganizationMembershipService:
             }
             for membership, profile in rows
         ]
+
+    def assign_member(self, organization_id: str, user_id: UUID):
+        organization = self.organizations.get(organization_id)
+        profile = self.session.get(AdminProfile, user_id)
+        if not profile or not profile.active or profile.role != "admin":
+            raise NotFoundError("An active administrator with that user ID was not found.")
+        if organization.status != "active":
+            raise ConflictError("You can only assign administrators to an active organization.")
+        if self.memberships.get(organization_id, user_id):
+            raise ConflictError("This administrator is already assigned to the organization.")
+
+        membership = OrganizationMembership(
+            organization_id=organization_id,
+            user_id=user_id,
+            joined_at=datetime.now(timezone.utc),
+        )
+        self.session.add(membership)
+        try:
+            self.session.commit()
+        except IntegrityError as exc:
+            self.session.rollback()
+            raise ConflictError("This administrator is already assigned to the organization.") from exc
+        self.session.refresh(membership)
+        return organization, profile, membership
 
     def remove_member(self, organization_id: str, user_id: UUID) -> None:
         self.organizations.get(organization_id)
