@@ -1,11 +1,14 @@
 from pydantic import BaseModel
 
+
 class MessageResponse(BaseModel):
     message: str
+
 
 class ConflictResponse(BaseModel):
     conflict: bool
     event: dict | None = None
+
 
 class OrganizationResponse(BaseModel):
     id: str
@@ -17,7 +20,9 @@ class OrganizationResponse(BaseModel):
     address: str
     category: str
     status: str
+    joinCode: str
     createdAt: str
+
 
 class EventResponse(BaseModel):
     id: str
