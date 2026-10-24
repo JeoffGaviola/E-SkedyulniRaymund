@@ -6,6 +6,11 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 ALTER TABLE public.organizations
     ADD COLUMN IF NOT EXISTS join_code VARCHAR(32);
 
+ALTER TABLE public.organizations
+    ALTER COLUMN join_code SET DEFAULT (
+        'ESK-' || upper(substr(encode(gen_random_bytes(8), 'hex'), 1, 12))
+    );
+
 UPDATE public.organizations
 SET join_code = 'ESK-' || upper(substr(encode(gen_random_bytes(8), 'hex'), 1, 12))
 WHERE join_code IS NULL OR btrim(join_code) = '';
