@@ -13,9 +13,7 @@ class OrganizationRepository:
     def list(self, query: str | None, status: str | None):
         statement = select(Organization).order_by(Organization.name.asc())
         if query:
-            statement = statement.where(
-                Organization.name.ilike(f"%{query.strip()}%")
-            )
+            statement = statement.where(Organization.name.ilike(f"%{query.strip()}%"))
         if status:
             statement = statement.where(Organization.status == status)
         return list(self.session.scalars(statement))
@@ -27,16 +25,13 @@ class OrganizationRepository:
         return item
 
     def by_join_code(self, join_code: str) -> Organization | None:
-        statement = select(Organization).where(
-            func.upper(Organization.join_code) == join_code.upper()
+        return self.session.scalar(
+            select(Organization).where(
+                func.upper(Organization.join_code) == join_code.upper()
+            )
         )
-        return self.session.scalar(statement)
 
-    def join_code_exists(
-        self,
-        join_code: str,
-        exclude_id: str | None = None,
-    ) -> bool:
+    def join_code_exists(self, join_code: str, exclude_id: str | None = None) -> bool:
         statement = select(Organization.id).where(
             func.upper(Organization.join_code) == join_code.upper()
         )
@@ -44,11 +39,7 @@ class OrganizationRepository:
             statement = statement.where(Organization.id != exclude_id)
         return self.session.scalar(statement) is not None
 
-    def name_exists(
-        self,
-        name: str,
-        exclude_id: str | None = None,
-    ) -> bool:
+    def name_exists(self, name: str, exclude_id: str | None = None) -> bool:
         statement = select(Organization.id).where(
             func.lower(Organization.name) == name.strip().lower()
         )
@@ -60,11 +51,8 @@ class OrganizationRepository:
         from sqlalchemy import func
         return int(
             self.session.scalar(
-                select(func.count(Event.id)).where(
-                    Event.organization_id == organization_id
-                )
-            )
-            or 0
+                select(func.count(Event.id)).where(Event.organization_id == organization_id)
+            ) or 0
         )
 
     def events_for(self, organization_id: str):
