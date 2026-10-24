@@ -23,10 +23,7 @@ class OrganizationMembershipRepository:
     def list_for_user(self, user_id: UUID) -> list[Organization]:
         statement = (
             select(Organization)
-            .join(
-                OrganizationMembership,
-                OrganizationMembership.organization_id == Organization.id,
-            )
+            .join(OrganizationMembership, OrganizationMembership.organization_id == Organization.id)
             .where(OrganizationMembership.user_id == user_id)
             .order_by(Organization.name.asc())
         )
@@ -45,7 +42,5 @@ class OrganizationMembershipRepository:
             .order_by(Organization.name.asc())
         )
         if query and query.strip():
-            statement = statement.where(
-                Organization.name.ilike(f"%{query.strip()}%")
-            )
+            statement = statement.where(Organization.name.ilike(f"%{query.strip()}%"))
         return list(self.session.scalars(statement))
