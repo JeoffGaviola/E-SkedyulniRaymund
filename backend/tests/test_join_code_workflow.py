@@ -10,6 +10,7 @@ from admin.database import Base
 from admin.models.admin_profile import AdminProfile
 from admin.models.member_profile import MemberProfile
 from admin.models.organization_member_account import OrganizationMemberAccount
+from admin.models.organization_join_request import OrganizationJoinRequest
 from admin.models.organization import Organization
 from admin.schemas.join_request import JoinRequestDecisionRequest, PublicJoinRequestCreate
 from admin.services.organization_join_request_service import OrganizationJoinRequestService
