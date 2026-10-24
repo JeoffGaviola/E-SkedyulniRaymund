@@ -25,7 +25,6 @@ class OrganizationMembershipService:
         organization = self.organizations.get(organization_id)
         if organization.status != "active":
             raise ConflictError("You can only join an active organization.")
-
         if self.memberships.get(organization_id, user_id):
             raise ConflictError("You have already joined this organization.")
 
@@ -35,15 +34,11 @@ class OrganizationMembershipService:
             joined_at=datetime.now(timezone.utc),
         )
         self.memberships.add(membership)
-
         try:
             self.session.commit()
         except IntegrityError as exc:
             self.session.rollback()
-            raise ConflictError(
-                "You have already joined this organization."
-            ) from exc
-
+            raise ConflictError("You have already joined this organization.") from exc
         self.session.refresh(membership)
         return organization, membership
 
@@ -60,21 +55,18 @@ class OrganizationMembershipService:
         return self.memberships.list_available_for_user(user_id, query)
 
     def list_members(self, organization_id: str):
-        self.organizations.get(organization_id)
+        organization = self.organizations.get(organization_id)
         statement = (
             select(OrganizationMembership, AdminProfile)
-            .join(
-                AdminProfile,
-                AdminProfile.user_id == OrganizationMembership.user_id,
-            )
+            .join(AdminProfile, AdminProfile.user_id == OrganizationMembership.user_id)
             .where(OrganizationMembership.organization_id == organization_id)
             .order_by(AdminProfile.username.asc())
         )
         rows = self.session.execute(statement).all()
         return [
             {
-                "organizationId": membership.organization_id,
-                "organizationName": self.organizations.get(organization_id).name,
+                "organizationId": organization.id,
+                "organizationName": organization.name,
                 "userId": str(profile.user_id),
                 "username": profile.username,
                 "email": profile.email,
