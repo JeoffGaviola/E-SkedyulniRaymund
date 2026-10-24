@@ -4,13 +4,10 @@ export const INITIAL_FORM: FormData = {
   name: "",
   groupCode: "",
   groupName: "",
+  joinRequestId: "",
 }
 
-export const EXAMPLE_GROUPS: Record<string, string> = {
-  "LECT-2024": "Lectors Ministry",
-  "ALTAR-01": "Altar Servers",
-  "CHOIR-A": "Parish Choir",
-  "YOUTH-GRP": "Youth Ministry",
-}
-
-export const PENDING_STEPS = ["Your request has been sent to the group leader.", "They will review and approve your request."]
+export const PENDING_STEPS = [
+  "Your request is saved and waiting for administrator review.",
+  "Check the request status for the administrator's decision.",
+]
