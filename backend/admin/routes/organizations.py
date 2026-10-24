@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 
 from ..config import Settings
 from ..database import Database
@@ -43,15 +43,14 @@ def list_organizations(
     _: dict = Depends(require_admin),
 ):
     with database.session() as session:
-        rows = OrganizationService(session).list(query, status_filter)
-        return [to_response(item) for item in rows]
+        return [
+            to_response(item)
+            for item in OrganizationService(session).list(query, status_filter)
+        ]
 
 
 @router.post("", response_model=OrganizationResponse, status_code=201)
-def create_organization(
-    data: OrganizationCreate,
-    _: dict = Depends(require_admin),
-):
+def create_organization(data: OrganizationCreate, _: dict = Depends(require_admin)):
     with database.session() as session:
         return to_response(OrganizationService(session).create(data))
 
@@ -62,19 +61,19 @@ def list_available_organizations(
     current_admin: dict = Depends(require_admin),
 ):
     with database.session() as session:
-        rows = OrganizationMembershipService(session).available(
+        items = OrganizationMembershipService(session).available(
             UUID(current_admin["userId"]), query
         )
-        return [to_response(item) for item in rows]
+        return [to_response(item) for item in items]
 
 
 @router.get("/mine", response_model=list[OrganizationResponse])
 def list_my_organizations(current_admin: dict = Depends(require_admin)):
     with database.session() as session:
-        rows = OrganizationMembershipService(session).mine(
+        items = OrganizationMembershipService(session).mine(
             UUID(current_admin["userId"])
         )
-        return [to_response(item) for item in rows]
+        return [to_response(item) for item in items]
 
 
 @router.post("/join-by-code", response_model=OrganizationMembershipResponse, status_code=201)
@@ -101,9 +100,8 @@ def regenerate_organization_join_code(
     _: dict = Depends(require_admin),
 ):
     with database.session() as session:
-        return to_response(
-            OrganizationService(session).regenerate_join_code(organization_id)
-        )
+        item = OrganizationService(session).regenerate_join_code(organization_id)
+        return to_response(item)
 
 
 @router.get("/{organization_id}/members", response_model=list[OrganizationMemberDetailResponse])
@@ -157,16 +155,11 @@ def update_organization(
     _: dict = Depends(require_admin),
 ):
     with database.session() as session:
-        return to_response(
-            OrganizationService(session).update(organization_id, data)
-        )
+        return to_response(OrganizationService(session).update(organization_id, data))
 
 
 @router.patch("/{organization_id}/toggle-status", response_model=OrganizationResponse)
-def toggle_organization(
-    organization_id: str,
-    _: dict = Depends(require_admin),
-):
+def toggle_organization(organization_id: str, _: dict = Depends(require_admin)):
     with database.session() as session:
         return to_response(OrganizationService(session).toggle(organization_id))
 
