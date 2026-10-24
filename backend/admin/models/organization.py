@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from ..core.join_codes import generate_join_code
 from ..database import Base
 
 if TYPE_CHECKING:
@@ -14,6 +15,13 @@ if TYPE_CHECKING:
 
 class Organization(Base):
     __tablename__ = "organizations"
+    __table_args__ = (
+        Index(
+            "uq_organizations_join_code_ci",
+            func.upper(join_code if "join_code" in locals() else ""),
+            unique=True,
+        ),
+    )
 
     id: Mapped[str] = mapped_column(
         String(40),
@@ -57,6 +65,11 @@ class Organization(Base):
     status: Mapped[str] = mapped_column(
         String(20),
         default="active",
+        nullable=False,
+    )
+    join_code: Mapped[str] = mapped_column(
+        String(32),
+        default=generate_join_code,
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
