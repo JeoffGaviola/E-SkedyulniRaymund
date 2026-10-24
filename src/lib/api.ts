@@ -61,7 +61,7 @@ function errorMessage(payload: unknown, status: number): string {
     }
   }
 
-  return \`Request failed with status \${status}.\`
+  return `Request failed with status ${status}.`
 }
 
 export async function apiRequest<T>(
@@ -86,19 +86,19 @@ export async function apiRequest<T>(
       throw new Error("Please sign in again to continue.")
     }
 
-    headers.set("Authorization", \`Bearer \${token}\`)
+    headers.set("Authorization", `Bearer ${token}`)
   }
 
   let response: Response
 
   try {
-    response = await fetch(\`\${API_BASE_URL}\${path}\`, {
+    response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers,
     })
   } catch {
     throw new Error(
-      \`Cannot connect to the E-Skedyul API at \${API_BASE_URL}. Check that the backend is running and VITE_API_URL is correct.\`,
+      `Cannot connect to the E-Skedyul API at ${API_BASE_URL}. Check that the backend is running and VITE_API_URL is correct.`,
     )
   }
 
