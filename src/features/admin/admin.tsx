@@ -312,7 +312,7 @@ function OrganizationJoinCodePanel({ organization, admin }: {
     setMessage("")
     try {
       const code = await admin.regenerateJoinCode(organization.id)
-      setMessage(\`New code generated: \${code}\`)
+      setMessage(`New code generated: ${code}`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to regenerate the join code.")
     } finally {
@@ -406,7 +406,7 @@ function OrganizationMemberships({ organization, admin }: {
   }
 
   async function remove(userId: string, username: string) {
-    if (!window.confirm(\`Remove \${username} from \${organization.name}?\`)) return
+    if (!window.confirm(`Remove ${username} from ${organization.name}?`)) return
     setBusy(true)
     setError("")
     const success = await admin.removeAdministrator(organization.id, userId)
@@ -977,7 +977,7 @@ function JoinRequestsSection({ admin }: { admin: ReturnType<typeof useAdmin> }) 
       const value = window.prompt("Optional reason for rejecting this request:", "")
       if (value === null) return
       note = value.trim()
-    } else if (!window.confirm(\`Approve \${request.memberName}'s request to join \${request.organizationName}?\`)) {
+    } else if (!window.confirm(`Approve ${request.memberName}'s request to join ${request.organizationName}?`)) {
       return
     }
 
@@ -989,7 +989,7 @@ function JoinRequestsSection({ admin }: { admin: ReturnType<typeof useAdmin> }) 
   }
 
   async function remove(request: OrganizationJoinRequest) {
-    if (!window.confirm(\`Delete the join request from \${request.memberName}?\`)) return
+    if (!window.confirm(`Delete the join request from ${request.memberName}?`)) return
     setBusyId(request.id)
     setError("")
     const success = await admin.deleteJoinRequest(request.id)
