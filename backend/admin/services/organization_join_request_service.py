@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from uuid import uuid4, UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -7,10 +7,9 @@ from sqlalchemy.orm import Session
 
 from ..core.errors import ConflictError, NotFoundError
 from ..core.join_codes import normalize_join_code
-from ..models.organization import Organization
 from ..models.organization_join_request import OrganizationJoinRequest
 from ..repositories.organization_repository import OrganizationRepository
-from ..schemas.join_request import PublicJoinRequestCreate, JoinRequestDecisionRequest
+from ..schemas.join_request import JoinRequestDecisionRequest, PublicJoinRequestCreate
 
 
 class OrganizationJoinRequestService:
@@ -78,12 +77,7 @@ class OrganizationJoinRequestService:
             statement = statement.where(OrganizationJoinRequest.status == status)
         return list(self.session.scalars(statement))
 
-    def decide(
-        self,
-        request_id: str,
-        decision: JoinRequestDecisionRequest,
-        reviewer_id: UUID,
-    ):
+    def decide(self, request_id: str, decision: JoinRequestDecisionRequest, reviewer_id: UUID):
         request = self.session.get(OrganizationJoinRequest, request_id)
         if not request:
             raise NotFoundError("Join request not found.")
@@ -100,7 +94,6 @@ class OrganizationJoinRequestService:
         request.reviewed_at = datetime.now(timezone.utc)
         request.reviewed_by = reviewer_id
         request.reviewer_note = decision.note.strip()
-
         self.session.commit()
         self.session.refresh(request)
         return request
