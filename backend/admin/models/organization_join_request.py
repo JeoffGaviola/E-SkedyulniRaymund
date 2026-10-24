@@ -29,39 +29,16 @@ class OrganizationJoinRequest(Base):
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     organization_id: Mapped[str] = mapped_column(
-        String(40),
-        ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
+        String(40), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
     )
-    member_name: Mapped[str] = mapped_column(
-        String(150),
-        nullable=False,
-    )
-    submitted_join_code: Mapped[str] = mapped_column(
-        String(32),
-        nullable=False,
-    )
-    status: Mapped[str] = mapped_column(
-        String(20),
-        default="pending",
-        nullable=False,
-    )
-    requested_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-    )
-    reviewed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
+    member_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    submitted_join_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by: Mapped[UUID | None] = mapped_column(
-        ForeignKey("admin_profiles.user_id", ondelete="SET NULL"),
-        nullable=True,
+        ForeignKey("admin_profiles.user_id", ondelete="SET NULL"), nullable=True
     )
-    reviewer_note: Mapped[str] = mapped_column(
-        Text,
-        default="",
-        nullable=False,
-    )
+    reviewer_note: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
     organization: Mapped["Organization"] = relationship()
