@@ -20,16 +20,16 @@ def session():
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         now = datetime.now(timezone.utc)
-        admin = AdminProfile(
-            user_id=uuid4(),
-            username="test-admin",
-            email="test-admin@example.com",
-            full_name="Test Admin",
-            role="admin",
-            active=True,
-            created_at=now,
-        )
-        db.add(admin)
+        db.add_all([
+            AdminProfile(
+                user_id=uuid4(), username="test-admin", email="test-admin@example.com",
+                full_name="Test Admin", role="admin", active=True, created_at=now,
+            ),
+            AdminProfile(
+                user_id=uuid4(), username="other-admin", email="other-admin@example.com",
+                full_name="Other Admin", role="admin", active=True, created_at=now,
+            ),
+        ])
         db.add_all([
             Organization(
                 id="org-active", name="Active Organization", description="",
@@ -68,6 +68,30 @@ def test_admin_cannot_join_inactive_organization_by_code(session):
     admin = session.query(AdminProfile).filter_by(username="test-admin").one()
     with pytest.raises(ConflictError, match="active organization"):
         OrganizationMembershipService(session).join_by_code("ESK-INACTIVE", admin.user_id)
+
+
+def test_admin_can_assign_and_remove_another_admin(session):
+    target = session.query(AdminProfile).filter_by(username="other-admin").one()
+    service = OrganizationMembershipService(session)
+    organization, profile, membership = service.assign_member("org-active", target.user_id)
+    assert organization.id == "org-active"
+    assert profile.username == "other-admin"
+    assert membership.user_id == target.user_id
+    assert any(row["userId"] == str(target.user_id) for row in service.list_members("org-active"))
+
+    service.remove_member("org-active", target.user_id)
+    assert all(row["userId"] != str(target.user_id) for row in service.list_members("org-active"))
+
+
+def test_assignable_admins_excludes_existing_members(session):
+    target = session.query(AdminProfile).filter_by(username="other-admin").one()
+    service = OrganizationMembershipService(session)
+    candidates = service.list_assignable_admins("org-active")
+    assert any(row["userId"] == str(target.user_id) for row in candidates)
+
+    service.assign_member("org-active", target.user_id)
+    candidates_after = service.list_assignable_admins("org-active")
+    assert all(row["userId"] != str(target.user_id) for row in candidates_after)
 
 
 def test_public_member_can_submit_request_and_admin_can_approve(session):
