@@ -18,12 +18,13 @@ import { SlotList, SlotVolunteerScreen, SlotServingScreen, SlotFilledScreen } fr
 import { useSlots } from "./features/slots/useSlots"
 import { AdminScreen } from "./features/admin/admin"
 import { AdminLoginScreen } from "./features/admin/login"
+import { ADMIN_UNAUTHORIZED_EVENT, clearAdminToken, getAdminToken, logoutAdmin } from "./lib/api"
 
 export default function App() {
   const isDesktop = useIsDesktop()
   const [screen, setScreen] = useState<Screen>("welcome")
   const [prevScreen, setPrevScreen] = useState<Screen>("welcome")
-  const [adminAuthenticated, setAdminAuthenticated] = useState(false)
+  const [adminAuthenticated, setAdminAuthenticated] = useState(() => Boolean(getAdminToken()))
 
   const [homeTab, setHomeTab] = useState<HomeTab>("availability")
   const [ministry, setMinistry] = useState(MINISTRIES[0])
@@ -50,6 +51,17 @@ export default function App() {
     applyStatusBar(screen)
   }, [screen])
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      clearAdminToken()
+      setAdminAuthenticated(false)
+      setScreen(current => current === "admin" ? "admin-login" : current)
+    }
+
+    window.addEventListener(ADMIN_UNAUTHORIZED_EVENT, handleUnauthorized)
+    return () => window.removeEventListener(ADMIN_UNAUTHORIZED_EVENT, handleUnauthorized)
+  }, [])
+
   // Android back button support (only active inside the Android app).
   const screenRef = useRef(screen)
   screenRef.current = screen
@@ -62,7 +74,7 @@ export default function App() {
   switch (screen) {
     // ─── Wizard ───────────────────────────────────────────────────────────────
     case "welcome":
-      return <WelcomeScreen onStart={() => go("tell-name")} onAdmin={() => go("admin-login")} />
+      return <WelcomeScreen onStart={() => go("tell-name")} onAdmin={() => go(getAdminToken() ? "admin" : "admin-login")} />
 
     case "admin-login":
       return (
@@ -76,9 +88,11 @@ export default function App() {
       )
 
     case "admin":
-      return adminAuthenticated ? (
+      return adminAuthenticated && getAdminToken() ? (
         <AdminScreen
           onLogout={() => {
+            clearAdminToken()
+            void logoutAdmin()
             setAdminAuthenticated(false)
             go("welcome")
           }}
