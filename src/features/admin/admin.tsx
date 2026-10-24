@@ -937,7 +937,7 @@ function JoinRequestsSection({ admin }: { admin: ReturnType<typeof useAdmin> }) 
     <div className="space-y-6">
       <AdminHeader
         title="Member join requests"
-        description="Review requests submitted using organization join codes."
+        description="Review requests submitted using organization join codes. Approval records the decision only; it does not create a member account or membership."
       />
       <section className="rounded-2xl border border-border bg-white p-4 shadow-sm">
         <p className="text-sm font-semibold text-text">Filter requests</p>
