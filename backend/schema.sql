@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS public.events (
         )
 );
 
+-- Admin assignments are separate from ordinary member accounts.
 CREATE TABLE IF NOT EXISTS public.organization_members (
     organization_id VARCHAR(40) NOT NULL
         REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -65,10 +66,30 @@ CREATE TABLE IF NOT EXISTS public.organization_members (
     PRIMARY KEY (organization_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS public.member_profiles (
+    user_id UUID PRIMARY KEY
+        REFERENCES auth.users(id) ON DELETE CASCADE,
+    email VARCHAR(255) NULL,
+    full_name VARCHAR(150) NOT NULL DEFAULT '',
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.organization_member_accounts (
+    organization_id VARCHAR(40) NOT NULL
+        REFERENCES public.organizations(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL
+        REFERENCES public.member_profiles(user_id) ON DELETE CASCADE,
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (organization_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS public.organization_join_requests (
     id VARCHAR(40) PRIMARY KEY,
     organization_id VARCHAR(40) NOT NULL
         REFERENCES public.organizations(id) ON DELETE CASCADE,
+    member_user_id UUID NULL
+        REFERENCES public.member_profiles(user_id) ON DELETE SET NULL,
     member_name VARCHAR(150) NOT NULL,
     submitted_join_code VARCHAR(32) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending'
@@ -98,9 +119,21 @@ CREATE INDEX IF NOT EXISTS ix_join_requests_organization
     ON public.organization_join_requests(organization_id);
 CREATE INDEX IF NOT EXISTS ix_join_requests_status_requested
     ON public.organization_join_requests(status, requested_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_join_request_by_name
+-- Authenticated members are deduplicated by identity; anonymous requests
+-- are deduplicated by normalized name because they have no user ID.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_join_request_by_member
+    ON public.organization_join_requests(organization_id, member_user_id)
+    WHERE status = 'pending' AND member_user_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_join_request_anonymous_by_name
     ON public.organization_join_requests(organization_id, lower(member_name))
-    WHERE status = 'pending';
+    WHERE status = 'pending' AND member_user_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_member_profiles_email
+    ON public.member_profiles(email);
+
+CREATE INDEX IF NOT EXISTS idx_organization_member_accounts_user
+    ON public.organization_member_accounts(user_id);
 
 CREATE OR REPLACE FUNCTION public.is_admin(uid UUID)
 RETURNS BOOLEAN
@@ -119,6 +152,8 @@ ALTER TABLE public.admin_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organization_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.member_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.organization_member_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organization_join_requests ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS admin_profile_self_read ON public.admin_profiles;
@@ -140,6 +175,39 @@ WITH CHECK (public.is_admin(auth.uid()));
 
 DROP POLICY IF EXISTS admin_manage_organization_members ON public.organization_members;
 CREATE POLICY admin_manage_organization_members ON public.organization_members
+FOR ALL TO authenticated
+USING (public.is_admin(auth.uid()))
+WITH CHECK (public.is_admin(auth.uid()));
+
+DROP POLICY IF EXISTS admin_manage_join_requests ON public.organization_join_requests;
+CREATE POLICY admin_manage_join_requests ON public.organization_join_requests
+FOR ALL TO authenticated
+USING (public.is_admin(auth.uid()))
+WITH CHECK (public.is_admin(auth.uid()));
+
+DROP POLICY IF EXISTS member_read_own_join_requests ON public.organization_join_requests;
+CREATE POLICY member_read_own_join_requests ON public.organization_join_requests
+FOR SELECT TO authenticated
+USING (member_user_id = auth.uid());
+
+DROP POLICY IF EXISTS member_profile_read_self ON public.member_profiles;
+CREATE POLICY member_profile_read_self ON public.member_profiles
+FOR SELECT TO authenticated
+USING (user_id = auth.uid() OR public.is_admin(auth.uid()));
+
+DROP POLICY IF EXISTS admin_manage_member_profiles ON public.member_profiles;
+CREATE POLICY admin_manage_member_profiles ON public.member_profiles
+FOR ALL TO authenticated
+USING (public.is_admin(auth.uid()))
+WITH CHECK (public.is_admin(auth.uid()));
+
+DROP POLICY IF EXISTS member_read_own_organization_memberships ON public.organization_member_accounts;
+CREATE POLICY member_read_own_organization_memberships ON public.organization_member_accounts
+FOR SELECT TO authenticated
+USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS admin_manage_member_organization_accounts ON public.organization_member_accounts;
+CREATE POLICY admin_manage_member_organization_accounts ON public.organization_member_accounts
 FOR ALL TO authenticated
 USING (public.is_admin(auth.uid()))
 WITH CHECK (public.is_admin(auth.uid()));
