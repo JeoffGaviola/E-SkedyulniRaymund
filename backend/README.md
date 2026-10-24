@@ -37,9 +37,13 @@ The Admin login calls `POST /admin/auth/login`. After authentication, the fronte
 
 Other Admin endpoints cover organization CRUD and status/join-code management, event CRUD and conflict checking, organization administrator assignments, and join-request review. The API is defined in `admin/routes/`; the UI integration is in `src/features/admin/` and the shared API helper is `src/lib/api.ts`.
 
-## Join-request limitation
+## Member identity and join-request approval
 
-Public join requests currently contain a member name and an organization join code, but not an authenticated member ID or verified member profile. Admin approval records the decision and reviewer details; **it does not create a member account or organization membership**. The current organization membership table is for administrator profiles. Completing member access requires a member identity/profile model and corresponding member-side integration. The Wizard, Account, and Management frontend files are intentionally outside this Admin-only change.
+`organization_members` remains the administrator-assignment table, referencing `admin_profiles`. Ordinary members use the separate `member_profiles` and `organization_member_accounts` tables.
+
+When `POST /public/join-requests` receives a valid Supabase member access token in the `Authorization: Bearer` header, the backend associates the request with that authenticated member. Approval creates the corresponding `organization_member_accounts` row in the same transaction as the decision. Anonymous requests remain accepted for backward compatibility, but their approval records only the decision and does not create a membership. The Wizard frontend must send the authenticated member token to use the linked flow.
+
+For an existing Supabase database that already has the original schema and migration 001, run `migrations/002_member_identity_and_memberships.sql` in the SQL Editor. For a new database, use the updated `schema.sql` instead of running incremental migrations after it.
 
 ## Tests
 
