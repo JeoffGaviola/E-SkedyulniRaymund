@@ -1,0 +1,41 @@
+from fastapi import APIRouter
+
+from ..config import Settings
+from ..database import Database
+from ..schemas.join_request import PublicJoinRequestCreate, PublicJoinRequestStatusResponse
+from ..services.organization_join_request_service import OrganizationJoinRequestService
+
+router = APIRouter(prefix="/public/join-requests", tags=["Public Join Requests"])
+settings = Settings.from_env()
+database = Database(settings.database_url)
+
+
+def to_public_response(request):
+    return {
+        "id": request.id,
+        "organizationName": request.organization.name,
+        "status": request.status,
+        "requestedAt": request.requested_at.isoformat(),
+        "reviewedAt": request.reviewed_at.isoformat() if request.reviewed_at else None,
+        "reviewerNote": request.reviewer_note,
+        "message": (
+            "Your request is waiting for administrator review."
+            if request.status == "pending"
+            else f"Your request was {request.status}."
+        ),
+    }
+
+
+@router.post("", response_model=PublicJoinRequestStatusResponse, status_code=201)
+def create_join_request(data: PublicJoinRequestCreate):
+    with database.session() as session:
+        request = OrganizationJoinRequestService(session).create(data)
+        session.refresh(request)
+        return to_public_response(request)
+
+
+@router.get("/{request_id}", response_model=PublicJoinRequestStatusResponse)
+def get_join_request_status(request_id: str):
+    with database.session() as session:
+        request = OrganizationJoinRequestService(session).get_public_status(request_id)
+        return to_public_response(request)
