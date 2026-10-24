@@ -53,3 +53,28 @@ Do not expose `SUPABASE_SECRET_KEY` to the frontend. Browser code should use onl
 ## Important integration note
 
 The existing `UI-Testing` frontend is currently a prototype. `useAdmin.ts` stores organizations/events in React state, and `login.tsx` contains hardcoded demo credentials. This backend intentionally does not overwrite those files. Replace their local operations with API calls during frontend-backend integration.
+
+## Organization join codes and membership workflows
+
+The backend now supports two separate flows:
+
+- **Administrator joins an organization:** POST /admin/organizations/join-by-code with a JSON body such as {"joinCode":"ESK-..."}. The current administrator is added to organization_members if the code matches an active organization.
+- **Member requests to join:** POST /public/join-requests with {"memberName":"Alex Santos","joinCode":"ESK-..."}. Administrators can review requests through GET /admin/join-requests?status=pending and approve or reject using PATCH /admin/join-requests/{request_id}/decision with {"decision":"approved","note":"..."}. A member can check a decision through GET /public/join-requests/{request_id}.
+
+Additional endpoints:
+
+- POST /public/organizations/validate-join-code
+- POST /admin/organizations/{organization_id}/regenerate-join-code
+- GET /admin/organizations/{organization_id}/members
+- POST /admin/organizations/{organization_id}/members/{user_id} to assign an existing active admin profile to an organization
+- DELETE /admin/organizations/{organization_id}/members/{user_id} to remove that administrator membership
+- DELETE /admin/join-requests/{request_id} to remove a join request
+
+Organization create/edit responses include joinCode. A code is generated automatically when omitted on creation. A blank code on edit leaves the existing code unchanged; use the regenerate endpoint to invalidate the old code and create a new one.
+
+### Database upgrade
+
+For a database that already has the tables, run migrations/001_join_codes_and_join_requests.sql in Supabase SQL Editor. For a new database, run schema.sql; it includes the join-code column and join-request table.
+
+**Identity limitation:** organization_members references admin_profiles, so membership and assignment endpoints manage admin accounts only. Public join-request approval records a decision; it does not create a verified member login or member row. That requires a separate member-authentication and member-profile model.
+
