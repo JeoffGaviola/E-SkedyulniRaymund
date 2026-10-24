@@ -1,25 +1,21 @@
-
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 
 from ..config import Settings
 from ..database import Database
 from ..schemas.common import OrganizationResponse
 from ..schemas.organization import OrganizationCreate, OrganizationUpdate
-from ..schemas.membership import OrganizationMembershipResponse
-from ..services.organization_service import OrganizationService
-from ..services.organization_membership_service import (
-    OrganizationMembershipService,
+from ..schemas.membership import (
+    JoinByCodeRequest,
+    OrganizationMembershipResponse,
+    OrganizationMemberDetailResponse,
 )
+from ..services.organization_service import OrganizationService
+from ..services.organization_membership_service import OrganizationMembershipService
 from .deps import require_admin
 
-
-router = APIRouter(
-    prefix="/admin/organizations",
-    tags=["Admin Organizations"],
-)
-
+router = APIRouter(prefix="/admin/organizations", tags=["Admin Organizations"])
 settings = Settings.from_env()
 database = Database(settings.database_url)
 
@@ -35,6 +31,7 @@ def to_response(item):
         "address": item.address,
         "category": item.category,
         "status": item.status,
+        "joinCode": item.join_code,
         "createdAt": item.created_at.date().isoformat(),
     }
 
@@ -42,151 +39,140 @@ def to_response(item):
 @router.get("", response_model=list[OrganizationResponse])
 def list_organizations(
     query: str | None = Query(default=None),
-    status: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
     _: dict = Depends(require_admin),
 ):
     with database.session() as session:
-        organizations = OrganizationService(session).list(
-            query,
-            status,
-        )
-        return [to_response(item) for item in organizations]
+        rows = OrganizationService(session).list(query, status_filter)
+        return [to_response(item) for item in rows]
 
 
-@router.post(
-    "",
-    response_model=OrganizationResponse,
-    status_code=201,
-)
+@router.post("", response_model=OrganizationResponse, status_code=201)
 def create_organization(
     data: OrganizationCreate,
     _: dict = Depends(require_admin),
 ):
     with database.session() as session:
-        organization = OrganizationService(session).create(data)
-        return to_response(organization)
+        return to_response(OrganizationService(session).create(data))
 
 
-@router.get(
-    "/available",
-    response_model=list[OrganizationResponse],
-)
+@router.get("/available", response_model=list[OrganizationResponse])
 def list_available_organizations(
     query: str | None = Query(default=None),
     current_admin: dict = Depends(require_admin),
 ):
-    """List active organizations not yet joined by this admin."""
-    user_id = UUID(current_admin["userId"])
-
     with database.session() as session:
-        organizations = OrganizationMembershipService(
-            session
-        ).available(user_id, query)
+        rows = OrganizationMembershipService(session).available(
+            UUID(current_admin["userId"]), query
+        )
+        return [to_response(item) for item in rows]
 
-        return [to_response(item) for item in organizations]
+
+@router.get("/mine", response_model=list[OrganizationResponse])
+def list_my_organizations(current_admin: dict = Depends(require_admin)):
+    with database.session() as session:
+        rows = OrganizationMembershipService(session).mine(
+            UUID(current_admin["userId"])
+        )
+        return [to_response(item) for item in rows]
 
 
-@router.get(
-    "/mine",
-    response_model=list[OrganizationResponse],
-)
-def list_my_organizations(
+@router.post("/join-by-code", response_model=OrganizationMembershipResponse, status_code=201)
+def join_organization_by_code(
+    data: JoinByCodeRequest,
     current_admin: dict = Depends(require_admin),
 ):
-    """List organizations joined by the current admin."""
-    user_id = UUID(current_admin["userId"])
-
     with database.session() as session:
-        organizations = OrganizationMembershipService(
-            session
-        ).mine(user_id)
-
-        return [to_response(item) for item in organizations]
-
-
-@router.post(
-    "/{organization_id}/join",
-    response_model=OrganizationMembershipResponse,
-    status_code=201,
-)
-def join_organization(
-    organization_id: str,
-    current_admin: dict = Depends(require_admin),
-):
-    """Join an active organization."""
-    user_id = UUID(current_admin["userId"])
-
-    with database.session() as session:
-        organization, membership = OrganizationMembershipService(
-            session
-        ).join(organization_id, user_id)
-
+        organization, membership = OrganizationMembershipService(session).join_by_code(
+            data.joinCode, UUID(current_admin["userId"])
+        )
         return {
             "organizationId": organization.id,
             "organizationName": organization.name,
-            "userId": str(user_id),
+            "userId": str(current_admin["userId"]),
             "joinedAt": membership.joined_at.isoformat(),
-            "message": (
-                f"You joined {organization.name} successfully."
-            ),
+            "message": f"You joined {organization.name} successfully.",
         }
 
 
-@router.get(
-    "/{organization_id}",
-    response_model=OrganizationResponse,
-)
-def get_organization(
+@router.post("/{organization_id}/regenerate-join-code", response_model=OrganizationResponse)
+def regenerate_organization_join_code(
     organization_id: str,
     _: dict = Depends(require_admin),
 ):
     with database.session() as session:
-        organization = OrganizationService(session).get(
-            organization_id
+        return to_response(
+            OrganizationService(session).regenerate_join_code(organization_id)
         )
-        return to_response(organization)
 
 
-@router.put(
-    "/{organization_id}",
-    response_model=OrganizationResponse,
-)
+@router.get("/{organization_id}/members", response_model=list[OrganizationMemberDetailResponse])
+def list_organization_members(
+    organization_id: str,
+    _: dict = Depends(require_admin),
+):
+    with database.session() as session:
+        return OrganizationMembershipService(session).list_members(organization_id)
+
+
+@router.delete("/{organization_id}/members/{user_id}")
+def remove_organization_member(
+    organization_id: str,
+    user_id: UUID,
+    _: dict = Depends(require_admin),
+):
+    with database.session() as session:
+        OrganizationMembershipService(session).remove_member(organization_id, user_id)
+        return {"message": "Administrator removed from the organization."}
+
+
+@router.post("/{organization_id}/join", response_model=OrganizationMembershipResponse, status_code=201)
+def join_organization(
+    organization_id: str,
+    current_admin: dict = Depends(require_admin),
+):
+    with database.session() as session:
+        organization, membership = OrganizationMembershipService(session).join(
+            organization_id, UUID(current_admin["userId"])
+        )
+        return {
+            "organizationId": organization.id,
+            "organizationName": organization.name,
+            "userId": str(current_admin["userId"]),
+            "joinedAt": membership.joined_at.isoformat(),
+            "message": f"You joined {organization.name} successfully.",
+        }
+
+
+@router.get("/{organization_id}", response_model=OrganizationResponse)
+def get_organization(organization_id: str, _: dict = Depends(require_admin)):
+    with database.session() as session:
+        return to_response(OrganizationService(session).get(organization_id))
+
+
+@router.put("/{organization_id}", response_model=OrganizationResponse)
 def update_organization(
     organization_id: str,
     data: OrganizationUpdate,
     _: dict = Depends(require_admin),
 ):
     with database.session() as session:
-        organization = OrganizationService(session).update(
-            organization_id,
-            data,
+        return to_response(
+            OrganizationService(session).update(organization_id, data)
         )
-        return to_response(organization)
 
 
-@router.patch(
-    "/{organization_id}/toggle-status",
-    response_model=OrganizationResponse,
-)
+@router.patch("/{organization_id}/toggle-status", response_model=OrganizationResponse)
 def toggle_organization(
     organization_id: str,
     _: dict = Depends(require_admin),
 ):
     with database.session() as session:
-        organization = OrganizationService(session).toggle(
-            organization_id
-        )
-        return to_response(organization)
+        return to_response(OrganizationService(session).toggle(organization_id))
 
 
 @router.delete("/{organization_id}")
-def delete_organization(
-    organization_id: str,
-    _: dict = Depends(require_admin),
-):
+def delete_organization(organization_id: str, _: dict = Depends(require_admin)):
     with database.session() as session:
         OrganizationService(session).delete(organization_id)
-
-        return {
-            "message": "Organization deleted successfully."
-        }
+        return {"message": "Organization deleted successfully."}
