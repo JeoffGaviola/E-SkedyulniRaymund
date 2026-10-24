@@ -10,6 +10,7 @@ from ..schemas.membership import (
     JoinByCodeRequest,
     OrganizationMembershipResponse,
     OrganizationMemberDetailResponse,
+    AdminAccountCandidateResponse,
 )
 from ..services.organization_service import OrganizationService
 from ..services.organization_membership_service import OrganizationMembershipService
@@ -91,6 +92,16 @@ def regenerate_organization_join_code(organization_id: str, _: dict = Depends(re
 def list_organization_members(organization_id: str, _: dict = Depends(require_admin)):
     with database.session() as session:
         return OrganizationMembershipService(session).list_members(organization_id)
+
+
+@router.get("/{organization_id}/assignable-administrators", response_model=list[AdminAccountCandidateResponse])
+def list_assignable_administrators(
+    organization_id: str,
+    query: str | None = Query(default=None),
+    _: dict = Depends(require_admin),
+):
+    with database.session() as session:
+        return OrganizationMembershipService(session).list_assignable_admins(organization_id, query)
 
 
 @router.post("/{organization_id}/members/{user_id}", response_model=OrganizationMembershipResponse, status_code=201)
