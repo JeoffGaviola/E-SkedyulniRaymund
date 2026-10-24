@@ -227,7 +227,7 @@ export function PendingScreen({
       <div className="mt-6 flex flex-col items-center gap-7">
         <ClockIcon />
         <div className="text-center">
-          <h2 className={\`mb-2 text-2xl font-bold \${status === "approved" ? "text-[#15803D]" : status === "rejected" ? "text-[#C0392B]" : "text-[#C9921A]"}\`}>
+          <h2 className={`mb-2 text-2xl font-bold ${status === "approved" ? "text-[#15803D]" : status === "rejected" ? "text-[#C0392B]" : "text-[#C9921A]"}`}>
             {status === "approved" ? "Your request was approved" : status === "rejected" ? "Your request was rejected" : "Your request has been saved"}
           </h2>
           <p className="text-[17px] leading-relaxed text-[#1A202C]">
