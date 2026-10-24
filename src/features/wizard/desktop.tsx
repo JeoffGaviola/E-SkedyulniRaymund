@@ -1,7 +1,8 @@
 import { useState } from "react"
 import type { FormData } from "./types"
 import { Button, InputField, Card, BackButton, ClockIcon } from "../../shared/ui"
-import { EXAMPLE_GROUPS, PENDING_STEPS } from "./data"
+import { PENDING_STEPS } from "./data"
+import { getJoinRequestStatus, submitJoinRequest } from "./joinRequests"
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
@@ -72,18 +73,32 @@ function DesktopFormPanel({ children }: { children: React.ReactNode }) {
 // ─── Desktop Wizard Screens ───────────────────────────────────────────────────
 
 export function DesktopJoinGroupScreen({ data, setData, onJoin, onBack }: {
-  data: FormData; setData: (d: Partial<FormData>) => void; onJoin: () => void; onBack: () => void
+  data: FormData
+  setData: (data: Partial<FormData>) => void
+  onJoin: () => void
+  onBack: () => void
 }) {
   const [error, setError] = useState("")
   const [pasteMode, setPasteMode] = useState(false)
   const [pasteLink, setPasteLink] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  function handleJoin() {
-    const code = pasteMode ? (pasteLink.split("/").pop() || "").toUpperCase().trim() : data.groupCode.trim().toUpperCase()
-    if (!code) { setError("Please enter a group code to continue."); return }
-    const groupName = EXAMPLE_GROUPS[code]
-    if (!groupName) { setError("We couldn't find a group with that code. Please check with your group leader and try again."); return }
-    setData({ groupCode: code, groupName }); setError(""); onJoin()
+  async function handleJoin() {
+    setLoading(true)
+    setError("")
+    try {
+      const request = await submitJoinRequest(data.name, pasteMode ? pasteLink : data.groupCode)
+      setData({
+        groupCode: request.submittedJoinCode,
+        groupName: request.organizationName,
+        joinRequestId: request.id,
+      })
+      onJoin()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to submit your join request.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -92,42 +107,69 @@ export function DesktopJoinGroupScreen({ data, setData, onJoin, onBack }: {
       <DesktopFormPanel>
         <BackButton onClick={onBack} />
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-[#1B3A6B] mb-1">Join a Ministry Group</h2>
-          <p className="text-[#64748B] text-[17px]">Enter the group code given to you by your group leader or coordinator.</p>
+          <h2 className="mb-1 text-2xl font-bold text-[#1B3A6B]">Join a Ministry Group</h2>
+          <p className="text-[17px] text-[#64748B]">Enter the group code given to you by your group leader or coordinator.</p>
         </div>
         <Card>
           <div className="flex flex-col gap-6">
             {!pasteMode ? (
               <>
-                <InputField label="Group Code" id="d-group-code" value={data.groupCode} onChange={v => setData({ groupCode: v })} helper="Your group leader gave you this code. Example: LECT-2024" error={error} placeholder="Example: LECT-2024" autoComplete="off" />
+                <InputField
+                  label="Group Code"
+                  id="d-group-code"
+                  value={data.groupCode}
+                  onChange={value => { setData({ groupCode: value.toUpperCase() }); setError("") }}
+                  helper="Your organization administrator provides this code."
+                  error={error}
+                  placeholder="Enter group code"
+                  autoComplete="off"
+                />
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-[#D1D9E8]" /><span className="text-[#94A3B8] text-[14px] font-medium">or</span><div className="flex-1 h-px bg-[#D1D9E8]" />
+                  <div className="h-px flex-1 bg-[#D1D9E8]" />
+                  <span className="text-[14px] font-medium text-[#94A3B8]">or</span>
+                  <div className="h-px flex-1 bg-[#D1D9E8]" />
                 </div>
-                <button onClick={() => { setPasteMode(true); setError("") }} className="min-h-[52px] w-full rounded-xl border-2 border-dashed border-[#9BA8C0] text-[#1B3A6B] font-semibold text-[16px] flex items-center justify-center gap-2 hover:border-[#1B3A6B] hover:bg-[#F4F6FB] transition-colors cursor-pointer">
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <rect x="3" y="2" width="11" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.75" />
-                    <path d="M7 6h7M7 9h7M7 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    <path d="M6 5V3.5A1.5 1.5 0 0 1 7.5 2h9A1.5 1.5 0 0 1 18 3.5v11a1.5 1.5 0 0 1-1.5 1.5H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
+                <button
+                  type="button"
+                  onClick={() => { setPasteMode(true); setError("") }}
+                  className="flex min-h-[52px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#9BA8C0] text-[16px] font-semibold text-[#1B3A6B] transition-colors hover:border-[#1B3A6B] hover:bg-[#F4F6FB]"
+                >
                   Paste a Group Link Instead
                 </button>
               </>
             ) : (
               <>
-                <button onClick={() => { setPasteMode(false); setError("") }} className="text-[#64748B] text-[15px] hover:text-[#1B3A6B] transition-colors text-left cursor-pointer flex items-center gap-1 -mb-2">← Back to entering a code</button>
-                <InputField label="Paste Your Group Link" id="d-paste-link" value={pasteLink} onChange={setPasteLink} helper="Paste the link you received. It ends with your group code." error={error} placeholder="https://eskedyul.ph/join/LECT-2024" autoComplete="off" />
+                <button
+                  type="button"
+                  onClick={() => { setPasteMode(false); setError("") }}
+                  className="-mb-2 flex cursor-pointer items-center gap-1 text-left text-[15px] text-[#64748B] transition-colors hover:text-[#1B3A6B]"
+                >
+                  ← Back to entering a code
+                </button>
+                <InputField
+                  label="Paste Your Group Link"
+                  id="d-paste-link"
+                  value={pasteLink}
+                  onChange={value => { setPasteLink(value); setError("") }}
+                  helper="Paste the link provided by your organization."
+                  error={error}
+                  placeholder="Paste group link or code"
+                  autoComplete="off"
+                />
               </>
             )}
-            <Button onClick={handleJoin} variant="primary">Join This Group</Button>
+            {error && <p role="alert" className="text-sm font-medium text-[#C0392B]">{error}</p>}
+            <Button onClick={() => void handleJoin()} variant="primary" disabled={loading}>
+              {loading ? "Submitting request..." : "Join This Group"}
+            </Button>
           </div>
         </Card>
-        <div className="mt-5 bg-[#EFF6FF] border border-[#2563EB]/20 rounded-xl p-4">
-          <p className="text-[#2563EB] font-semibold text-[15px] mb-2">Try these sample codes:</p>
-          <div className="flex flex-wrap gap-2">
-            {Object.keys(EXAMPLE_GROUPS).map(code => (
-              <button key={code} onClick={() => { setData({ groupCode: code }); setPasteMode(false); setError("") }} className="font-mono bg-white text-[#1B3A6B] border border-[#D1D9E8] rounded-lg px-3 py-1.5 text-[14px] font-semibold hover:border-[#1B3A6B] transition-colors cursor-pointer">{code}</button>
-            ))}
-          </div>
+        <div className="mt-5 rounded-xl border border-[#2563EB]/20 bg-[#EFF6FF] p-4">
+          <p className="mb-2 text-[15px] font-semibold text-[#2563EB]">Need a group code?</p>
+          <p className="text-[15px] leading-relaxed text-[#1A202C]">
+            Ask your group leader or organization administrator for the current join code.
+            E-Skedyul will check it against the organization records.
+          </p>
         </div>
       </DesktopFormPanel>
     </div>
@@ -135,8 +177,35 @@ export function DesktopJoinGroupScreen({ data, setData, onJoin, onBack }: {
 }
 
 export function DesktopPendingScreen({ data, onBack, onApproved }: {
-  data: FormData; onBack: () => void; onApproved: () => void
+  data: FormData
+  onBack: () => void
+  onApproved: () => void
 }) {
+  const [checking, setChecking] = useState(false)
+  const [status, setStatus] = useState<"pending" | "approved" | "rejected">("pending")
+  const [statusMessage, setStatusMessage] = useState("")
+  const [reviewerNote, setReviewerNote] = useState("")
+  const [error, setError] = useState("")
+
+  async function checkStatus() {
+    if (!data.joinRequestId) {
+      setError("The request receipt is missing. Please submit your request again.")
+      return
+    }
+    setChecking(true)
+    setError("")
+    try {
+      const result = await getJoinRequestStatus(data.joinRequestId)
+      setStatus(result.status)
+      setStatusMessage(result.message)
+      setReviewerNote(result.reviewerNote)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to check request status.")
+    } finally {
+      setChecking(false)
+    }
+  }
+
   return (
     <div className="flex min-h-screen">
       <DesktopBrandPanel />
@@ -144,25 +213,40 @@ export function DesktopPendingScreen({ data, onBack, onApproved }: {
         <div className="flex flex-col items-center gap-7">
           <ClockIcon />
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-[#C9921A] mb-2">Your request is on its way!</h2>
-            <p className="text-[#1A202C] text-[17px] leading-relaxed">You've asked to join the <strong>{data.groupName}</strong> group.</p>
+            <h2 className={`mb-2 text-2xl font-bold ${status === "approved" ? "text-[#15803D]" : status === "rejected" ? "text-[#C0392B]" : "text-[#C9921A]"}`}>
+              {status === "approved" ? "Your request was approved" : status === "rejected" ? "Your request was rejected" : "Your request has been saved"}
+            </h2>
+            <p className="text-[17px] leading-relaxed text-[#1A202C]">
+              You've requested to join the <strong>{data.groupName || "selected organization"}</strong> group.
+            </p>
           </div>
-          <div className="bg-[#FEF3DC] border border-[#C9921A]/30 rounded-2xl p-6 w-full">
-            <p className="text-[#1A202C] text-[17px] leading-relaxed">The group leader needs to approve your request. This usually happens within 1–2 days.</p>
+          <div className="w-full rounded-2xl border border-[#C9921A]/30 bg-[#FEF3DC] p-6">
+            <p className="text-[17px] leading-relaxed text-[#1A202C]">
+              Your request is saved in E-Skedyul. The organization administrator can review it and record a decision.
+            </p>
+            <p className="mt-3 text-sm font-semibold text-[#1B3A6B]">
+              Request receipt: <span className="break-all font-mono">{data.joinRequestId || "Unavailable"}</span>
+            </p>
           </div>
-          <div className="w-full bg-white border border-[#D1D9E8] rounded-xl p-4">
-            <p className="text-[#64748B] text-[15px] font-semibold uppercase tracking-wide mb-2">What's next?</p>
+          <div className="w-full rounded-xl border border-[#D1D9E8] bg-white p-4">
+            <p className="mb-2 text-[15px] font-semibold uppercase tracking-wide text-[#64748B]">What's next?</p>
             <ol className="flex flex-col gap-2">
-              {PENDING_STEPS.map((s, i) => (
-                <li key={i} className="flex items-start gap-3 text-[15px] text-[#1A202C]">
-                  <span className="min-w-[24px] h-6 rounded-full bg-[#C9921A]/15 text-[#C9921A] font-bold text-[13px] flex items-center justify-center mt-0.5">{i + 1}</span>{s}
+              {PENDING_STEPS.map((step, index) => (
+                <li key={index} className="flex items-start gap-3 text-[15px] text-[#1A202C]">
+                  <span className="mt-0.5 flex h-6 min-w-[24px] items-center justify-center rounded-full bg-[#C9921A]/15 text-[13px] font-bold text-[#C9921A]">{index + 1}</span>
+                  {step}
                 </li>
               ))}
             </ol>
+            {statusMessage && <p role="status" className="mt-3 text-sm font-semibold text-[#1B3A6B]">{statusMessage}</p>}
+            {reviewerNote && <p className="mt-2 text-sm text-[#64748B]">Administrator note: {reviewerNote}</p>}
           </div>
+          {error && <p role="alert" className="w-full rounded-xl bg-red-light p-4 text-sm font-semibold text-red">{error}</p>}
           <div className="w-full border-t border-[#D1D9E8] pt-5 flex flex-col gap-3">
-            <p className="text-[#94A3B8] text-[14px] text-center">(Demo only) Simulate what happens after the group leader approves you:</p>
-            <Button onClick={onApproved} variant="primary">I've Been Approved — Continue</Button>
+            <Button onClick={() => void checkStatus()} disabled={checking || status === "approved"}>
+              {checking ? "Checking status..." : "Check request status"}
+            </Button>
+            {status === "approved" && <Button onClick={onApproved}>Continue to schedule</Button>}
             <Button onClick={onBack} variant="ghost">← Start Over</Button>
           </div>
         </div>
