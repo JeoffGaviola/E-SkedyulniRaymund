@@ -30,3 +30,10 @@ class OrganizationMemberDetailResponse(BaseModel):
     fullName: str
     joinedAt: str
     message: str
+
+
+class AdminAccountCandidateResponse(BaseModel):
+    userId: str
+    username: str
+    email: str
+    fullName: str
