@@ -15,65 +15,22 @@ if TYPE_CHECKING:
 
 class Organization(Base):
     __tablename__ = "organizations"
-    __table_args__ = (
-        Index("ix_organizations_join_code", "join_code"),
-    )
+    __table_args__ = (Index("ix_organizations_join_code", "join_code"),)
 
-    id: Mapped[str] = mapped_column(
-        String(40),
-        primary_key=True,
-    )
-    name: Mapped[str] = mapped_column(
-        String(150),
-        unique=True,
-        nullable=False,
-    )
-    description: Mapped[str] = mapped_column(
-        Text,
-        default="",
-        nullable=False,
-    )
-    contact_email: Mapped[str] = mapped_column(
-        String(255),
-        default="",
-        nullable=False,
-    )
-    phone: Mapped[str] = mapped_column(
-        String(50),
-        default="",
-        nullable=False,
-    )
-    timezone: Mapped[str] = mapped_column(
-        String(80),
-        default="Asia/Manila",
-        nullable=False,
-    )
-    address: Mapped[str] = mapped_column(
-        String(255),
-        default="",
-        nullable=False,
-    )
-    category: Mapped[str] = mapped_column(
-        String(100),
-        default="General",
-        nullable=False,
-    )
-    status: Mapped[str] = mapped_column(
-        String(20),
-        default="active",
-        nullable=False,
-    )
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), unique=True, nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    contact_email: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    phone: Mapped[str] = mapped_column(String(50), default="", nullable=False)
+    timezone: Mapped[str] = mapped_column(String(80), default="Asia/Manila", nullable=False)
+    address: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    category: Mapped[str] = mapped_column(String(100), default="General", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
     join_code: Mapped[str] = mapped_column(
         String(32),
         default=generate_join_code,
         nullable=False,
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    events: Mapped[list["Event"]] = relationship(
-        "Event",
-        back_populates="organization",
-    )
+    events: Mapped[list["Event"]] = relationship("Event", back_populates="organization")
