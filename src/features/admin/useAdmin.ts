@@ -100,7 +100,7 @@ export function useAdmin() {
 
       const saved = await apiRequest<Organization>(
         id
-          ? \`/admin/organizations/\${encodeURIComponent(id)}\`
+          ? `/admin/organizations/${encodeURIComponent(id)}`
           : "/admin/organizations",
         {
           method: id ? "PUT" : "POST",
@@ -120,7 +120,7 @@ export function useAdmin() {
   async function toggleOrganization(id: string): Promise<boolean> {
     try {
       await apiRequest<Organization>(
-        \`/admin/organizations/\${encodeURIComponent(id)}/toggle-status\`,
+        `/admin/organizations/${encodeURIComponent(id)}/toggle-status`,
         { method: "PATCH" },
       )
       return await refresh()
@@ -138,7 +138,7 @@ export function useAdmin() {
 
     try {
       await apiRequest<{ message: string }>(
-        \`/admin/organizations/\${encodeURIComponent(id)}\`,
+        `/admin/organizations/${encodeURIComponent(id)}`,
         { method: "DELETE" },
       )
       return await refresh()
@@ -150,7 +150,7 @@ export function useAdmin() {
 
   async function regenerateJoinCode(id: string): Promise<string> {
     const organization = await apiRequest<Organization>(
-      \`/admin/organizations/\${encodeURIComponent(id)}/regenerate-join-code\`,
+      `/admin/organizations/${encodeURIComponent(id)}/regenerate-join-code`,
       { method: "POST" },
     )
     await refresh()
@@ -160,7 +160,7 @@ export function useAdmin() {
   async function saveEvent(draft: EventDraft, id?: string): Promise<string> {
     const saved = await apiRequest<AdminEvent>(
       id
-        ? \`/admin/events/\${encodeURIComponent(id)}\`
+        ? `/admin/events/${encodeURIComponent(id)}`
         : "/admin/events",
       {
         method: id ? "PUT" : "POST",
@@ -174,7 +174,7 @@ export function useAdmin() {
   async function duplicateEvent(id: string): Promise<string | null> {
     try {
       const saved = await apiRequest<AdminEvent>(
-        \`/admin/events/\${encodeURIComponent(id)}/duplicate\`,
+        `/admin/events/${encodeURIComponent(id)}/duplicate`,
         { method: "POST" },
       )
       await refresh()
@@ -188,7 +188,7 @@ export function useAdmin() {
   async function cancelEvent(id: string): Promise<boolean> {
     try {
       await apiRequest<AdminEvent>(
-        \`/admin/events/\${encodeURIComponent(id)}/cancel\`,
+        `/admin/events/${encodeURIComponent(id)}/cancel`,
         { method: "POST" },
       )
       return await refresh()
@@ -201,7 +201,7 @@ export function useAdmin() {
   async function deleteEvent(id: string): Promise<boolean> {
     try {
       await apiRequest<{ message: string }>(
-        \`/admin/events/\${encodeURIComponent(id)}\`,
+        `/admin/events/${encodeURIComponent(id)}`,
         { method: "DELETE" },
       )
       return await refresh()
@@ -225,7 +225,7 @@ export function useAdmin() {
 
   async function joinOrganization(id: string): Promise<OrganizationMembership> {
     const result = await apiRequest<OrganizationMembership>(
-      \`/admin/organizations/\${encodeURIComponent(id)}/join\`,
+      `/admin/organizations/${encodeURIComponent(id)}/join`,
       { method: "POST" },
     )
     await refresh()
@@ -235,7 +235,7 @@ export function useAdmin() {
   async function listOrganizationMembers(id: string): Promise<OrganizationMember[]> {
     try {
       return await apiRequest<OrganizationMember[]>(
-        \`/admin/organizations/\${encodeURIComponent(id)}/members\`,
+        `/admin/organizations/${encodeURIComponent(id)}/members`,
       )
     } catch (err) {
       setError(getApiErrorMessage(err))
@@ -245,9 +245,9 @@ export function useAdmin() {
 
   async function listAssignableAdmins(id: string, query = ""): Promise<AdminAccountCandidate[]> {
     try {
-      const params = query.trim() ? \`?query=\${encodeURIComponent(query.trim())}\` : ""
+      const params = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : ""
       return await apiRequest<AdminAccountCandidate[]>(
-        \`/admin/organizations/\${encodeURIComponent(id)}/assignable-administrators\${params}\`,
+        `/admin/organizations/${encodeURIComponent(id)}/assignable-administrators${params}`,
       )
     } catch (err) {
       setError(getApiErrorMessage(err))
@@ -258,7 +258,7 @@ export function useAdmin() {
   async function assignAdministrator(id: string, userId: string): Promise<boolean> {
     try {
       await apiRequest<OrganizationMembership>(
-        \`/admin/organizations/\${encodeURIComponent(id)}/members/\${encodeURIComponent(userId)}\`,
+        `/admin/organizations/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`,
         { method: "POST" },
       )
       await refresh()
@@ -272,7 +272,7 @@ export function useAdmin() {
   async function removeAdministrator(id: string, userId: string): Promise<boolean> {
     try {
       await apiRequest<{ message: string }>(
-        \`/admin/organizations/\${encodeURIComponent(id)}/members/\${encodeURIComponent(userId)}\`,
+        `/admin/organizations/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`,
         { method: "DELETE" },
       )
       await refresh()
@@ -290,7 +290,7 @@ export function useAdmin() {
   ): Promise<boolean> {
     try {
       await apiRequest<OrganizationJoinRequest>(
-        \`/admin/join-requests/\${encodeURIComponent(id)}/decision\`,
+        `/admin/join-requests/${encodeURIComponent(id)}/decision`,
         {
           method: "PATCH",
           body: JSON.stringify({ decision, note }),
@@ -306,7 +306,7 @@ export function useAdmin() {
   async function deleteJoinRequest(id: string): Promise<boolean> {
     try {
       await apiRequest<{ message: string }>(
-        \`/admin/join-requests/\${encodeURIComponent(id)}\`,
+        `/admin/join-requests/${encodeURIComponent(id)}`,
         { method: "DELETE" },
       )
       return await refresh()
