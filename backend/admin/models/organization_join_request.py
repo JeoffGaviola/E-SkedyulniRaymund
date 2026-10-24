@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func, text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
@@ -19,11 +19,12 @@ class OrganizationJoinRequest(Base):
         Index(
             "uq_pending_join_request_by_name",
             "organization_id",
-            func.lower(member_name if "member_name" in locals() else ""),
+            "member_name",
             unique=True,
             postgresql_where=text("status = 'pending'"),
             sqlite_where=text("status = 'pending'"),
         ),
+        Index("ix_join_requests_status_requested", "status", "requested_at"),
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
@@ -31,7 +32,6 @@ class OrganizationJoinRequest(Base):
         String(40),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     member_name: Mapped[str] = mapped_column(
         String(150),
