@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button, InputField } from "../../shared/ui"
 import { useAdmin } from "./useAdmin"
 import type {
@@ -9,9 +9,14 @@ import type {
   OrganizationDraft,
   OrganizationStatus,
   Recurrence,
+  JoinRequestStatus,
+  OrganizationJoinRequest,
+  OrganizationMember,
+  AdminAccountCandidate,
+  OrganizationSaveResult,
 } from "./types"
 
-type AdminSection = "dashboard" | "organizations" | "events"
+type AdminSection = "dashboard" | "organizations" | "events" | "join" | "join-requests"
 type AdminView =
   | { name: "section"; section: AdminSection }
   | { name: "organization"; id: string }
@@ -27,6 +32,7 @@ const EMPTY_ORGANIZATION: OrganizationDraft = {
   address: "",
   category: "Parish",
   status: "active",
+  joinCode: "",
 }
 
 function emptyEvent(organizationId: string): EventDraft {
@@ -57,14 +63,17 @@ function formatDateTime(value: string) {
   }).format(new Date(value))
 }
 
-function StatusBadge({ status }: { status: OrganizationStatus | EventStatus }) {
-  const styles: Record<OrganizationStatus | EventStatus, string> = {
+function StatusBadge({ status }: { status: OrganizationStatus | EventStatus | JoinRequestStatus }) {
+  const styles: Record<OrganizationStatus | EventStatus | JoinRequestStatus, string> = {
     active: "bg-green-light text-green",
     inactive: "bg-slate-100 text-muted",
     published: "bg-green-light text-green",
     draft: "bg-gold-light text-gold",
     cancelled: "bg-red-light text-red",
     completed: "bg-navy-soft text-navy",
+    pending: "bg-gold-light text-gold",
+    approved: "bg-green-light text-green",
+    rejected: "bg-red-light text-red",
   }
   return (
     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold capitalize ${styles[status]}`}>
@@ -259,6 +268,7 @@ function OrganizationList({ admin, onCreate, onOpen }: {
                 <div>
                   <p className="font-bold text-text">{organization.name}</p>
                   <p className="mt-1 text-sm text-muted">{organization.contactEmail}</p>
+                  <p className="mt-2 font-mono text-xs font-semibold text-navy">Join code: {organization.joinCode}</p>
                 </div>
                 <p className="text-sm font-medium text-text">{organization.category}</p>
                 <p className="text-sm text-muted">
@@ -279,6 +289,192 @@ function OrganizationList({ admin, onCreate, onOpen }: {
   )
 }
 
+
+function OrganizationJoinCodePanel({ organization, admin }: {
+  organization: Organization
+  admin: ReturnType<typeof useAdmin>
+}) {
+  const [message, setMessage] = useState("")
+  const [busy, setBusy] = useState(false)
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(organization.joinCode)
+      setMessage("Join code copied.")
+    } catch {
+      window.prompt("Copy this organization join code:", organization.joinCode)
+    }
+  }
+
+  async function regenerate() {
+    if (!window.confirm("Generate a new code? The current code will stop accepting new requests.")) return
+    setBusy(true)
+    setMessage("")
+    try {
+      const code = await admin.regenerateJoinCode(organization.id)
+      setMessage(\`New code generated: \${code}\`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to regenerate the join code.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-border border-t-4 border-t-gold bg-white p-5 shadow-sm">
+      <p className="text-xs font-bold uppercase tracking-widest text-gold">Member access</p>
+      <h2 className="mt-2 text-xl font-bold text-text">Organization join code</h2>
+      <p className="mt-1 text-sm leading-relaxed text-muted">
+        Share this code with people who need to request membership.
+      </p>
+      <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border bg-bg p-4 sm:flex-row sm:items-center sm:justify-between">
+        <code className="break-all font-mono text-2xl font-extrabold tracking-wider text-navy">
+          {organization.joinCode || "No code"}
+        </code>
+        <div className="flex flex-wrap gap-2">
+          <Button size="compact" fullWidth={false} onClick={() => void copyCode()}>Copy code</Button>
+          <Button variant="secondary" size="compact" fullWidth={false} disabled={busy} onClick={() => void regenerate()}>
+            {busy ? "Generating..." : "Regenerate code"}
+          </Button>
+        </div>
+      </div>
+      {organization.status === "inactive" && (
+        <p className="mt-3 rounded-xl bg-gold-light p-3 text-sm text-gold">
+          This organization is inactive and will not accept new join requests.
+        </p>
+      )}
+      {message && <p role="status" className="mt-3 text-sm font-semibold text-navy">{message}</p>}
+    </section>
+  )
+}
+
+function OrganizationMemberships({ organization, admin }: {
+  organization: Organization
+  admin: ReturnType<typeof useAdmin>
+}) {
+  const [members, setMembers] = useState<OrganizationMember[]>([])
+  const [candidates, setCandidates] = useState<AdminAccountCandidate[]>([])
+  const [selectedUserId, setSelectedUserId] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+
+  async function loadMembers() {
+    setLoading(true)
+    const [memberRows, candidateRows] = await Promise.all([
+      admin.listOrganizationMembers(organization.id),
+      admin.listAssignableAdmins(organization.id),
+    ])
+    setMembers(memberRows)
+    setCandidates(candidateRows)
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    let mounted = true
+    async function load() {
+      setLoading(true)
+      const [memberRows, candidateRows] = await Promise.all([
+        admin.listOrganizationMembers(organization.id),
+        admin.listAssignableAdmins(organization.id),
+      ])
+      if (mounted) {
+        setMembers(memberRows)
+        setCandidates(candidateRows)
+        setLoading(false)
+      }
+    }
+    void load()
+    return () => { mounted = false }
+  }, [organization.id])
+
+  async function assign() {
+    if (!selectedUserId) {
+      setError("Select an administrator to assign.")
+      return
+    }
+    setBusy(true)
+    setError("")
+    const success = await admin.assignAdministrator(organization.id, selectedUserId)
+    if (success) {
+      setSelectedUserId("")
+      await loadMembers()
+    } else {
+      setError(admin.error || "Unable to assign this administrator.")
+    }
+    setBusy(false)
+  }
+
+  async function remove(userId: string, username: string) {
+    if (!window.confirm(\`Remove \${username} from \${organization.name}?\`)) return
+    setBusy(true)
+    setError("")
+    const success = await admin.removeAdministrator(organization.id, userId)
+    if (success) {
+      await loadMembers()
+    } else {
+      setError(admin.error || "Unable to remove this administrator.")
+    }
+    setBusy(false)
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+      <div>
+        <h2 className="text-xl font-bold text-text">Administrator assignments</h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">
+          Assign existing administrator accounts to this organization or remove their membership.
+        </p>
+      </div>
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        <select
+          aria-label="Select administrator to assign"
+          value={selectedUserId}
+          onChange={event => setSelectedUserId(event.target.value)}
+          disabled={busy || organization.status === "inactive"}
+          className="min-h-12 min-w-0 flex-1 rounded-xl border border-border bg-white px-3 py-2 text-sm text-text outline-none focus:border-navy"
+        >
+          <option value="">Select an administrator to assign</option>
+          {candidates.map(candidate => (
+            <option key={candidate.userId} value={candidate.userId}>
+              {candidate.fullName || candidate.username} — {candidate.email}
+            </option>
+          ))}
+        </select>
+        <Button fullWidth={false} disabled={busy || organization.status === "inactive" || candidates.length === 0} onClick={() => void assign()}>
+          {busy ? "Saving..." : "Assign administrator"}
+        </Button>
+      </div>
+      {organization.status === "inactive" && (
+        <p className="mt-2 text-sm text-muted">Reactivate this organization before assigning additional administrators.</p>
+      )}
+      {error && <p role="alert" className="mt-3 rounded-xl bg-red-light p-3 text-sm font-semibold text-red">{error}</p>}
+      <div className="mt-5 border-t border-border pt-4">
+        <p className="font-semibold text-text">Current administrators</p>
+        {loading ? (
+          <p className="mt-3 text-sm text-muted">Loading assignments...</p>
+        ) : members.length ? (
+          <div className="mt-3 divide-y divide-border">
+            {members.map(member => (
+              <div key={member.userId} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-semibold text-text">{member.fullName || member.username}</p>
+                  <p className="text-sm text-muted">{member.email} · @{member.username}</p>
+                </div>
+                <Button variant="danger" size="compact" fullWidth={false} disabled={busy} onClick={() => void remove(member.userId, member.username)}>
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-muted">No administrator accounts are assigned to this organization yet.</p>
+        )}
+      </div>
+    </section>
+  )
+}
+
 function OrganizationDetails({ organization, admin, onBack, onEdit, onCreateEvent }: {
   organization: Organization
   admin: ReturnType<typeof useAdmin>
@@ -288,17 +484,18 @@ function OrganizationDetails({ organization, admin, onBack, onEdit, onCreateEven
 }) {
   const organizationEvents = admin.events.filter(event => event.organizationId === organization.id)
 
-  function toggleStatus() {
+  async function toggleStatus() {
     const action = organization.status === "active" ? "deactivate" : "reactivate"
-    if (window.confirm(`Are you sure you want to ${action} ${organization.name}?`)) {
-      admin.toggleOrganization(organization.id)
-    }
+    if (!window.confirm(`Are you sure you want to ${action} ${organization.name}?`)) return
+    const success = await admin.toggleOrganization(organization.id)
+    if (!success) window.alert(admin.error || "Unable to update this organization.")
   }
 
-  function remove() {
+  async function remove() {
     if (!window.confirm(`Permanently delete ${organization.name}?`)) return
-    if (!admin.deleteOrganization(organization.id)) {
-      window.alert("This organization still has events. Delete or move those events before deleting the organization.")
+    const success = await admin.deleteOrganization(organization.id)
+    if (!success) {
+      window.alert(admin.error || "This organization still has events. Delete or move those events before deleting the organization.")
       return
     }
     onBack()
@@ -312,6 +509,8 @@ function OrganizationDetails({ organization, admin, onBack, onEdit, onCreateEven
         description={`${organization.category} · Created ${new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(new Date(organization.createdAt))}`}
         action={<StatusBadge status={organization.status} />}
       />
+      <OrganizationJoinCodePanel organization={organization} admin={admin} />
+      <OrganizationMemberships organization={organization} admin={admin} />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="rounded-2xl border border-border bg-white p-6 shadow-sm lg:col-span-2">
           <p className="text-xl font-bold text-text">Organization profile</p>
@@ -337,10 +536,10 @@ function OrganizationDetails({ organization, admin, onBack, onEdit, onCreateEven
             <Button variant="secondary" onClick={onCreateEvent} disabled={organization.status === "inactive"}>
               Create event
             </Button>
-            <Button variant="ghost" onClick={toggleStatus}>
+            <Button variant="ghost" onClick={() => void toggleStatus()}>
               {organization.status === "active" ? "Deactivate organization" : "Reactivate organization"}
             </Button>
-            <Button variant="danger" onClick={remove}>Delete organization</Button>
+            <Button variant="danger" onClick={() => void remove()}>Delete organization</Button>
           </div>
           {organization.status === "inactive" && (
             <p className="mt-4 rounded-xl bg-gold-light p-3 text-sm font-medium text-gold">
@@ -380,27 +579,36 @@ function OrganizationDetails({ organization, admin, onBack, onEdit, onCreateEven
 function OrganizationForm({ initial, onCancel, onSave }: {
   initial?: Organization
   onCancel: () => void
-  onSave: (draft: OrganizationDraft, id?: string) => { ok: boolean; message?: string }
+  onSave: (draft: OrganizationDraft, id?: string) => Promise<OrganizationSaveResult>
 }) {
   const [form, setForm] = useState<OrganizationDraft>(initial ?? EMPTY_ORGANIZATION)
   const [error, setError] = useState("")
+  const [saving, setSaving] = useState(false)
 
   function update(field: keyof OrganizationDraft, value: string) {
     setForm(current => ({ ...current, [field]: value }))
     setError("")
   }
 
-  function submit() {
+  async function submit() {
     if (!form.name.trim() || !form.contactEmail.trim() || !form.timezone.trim()) {
       setError("Organization name, contact email, and timezone are required.")
       return
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail)) {
-      setError("Enter a valid contact email address.")
+      setError("Enter a valid email address.")
       return
     }
-    const result = onSave(form, initial?.id)
-    if (!result.ok) setError(result.message || "Unable to save the organization.")
+    setSaving(true)
+    setError("")
+    try {
+      const result = await onSave(form, initial?.id)
+      if (!result.ok) setError(result.message || "Unable to save the organization.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save the organization.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -425,11 +633,22 @@ function OrganizationForm({ initial, onCancel, onSave }: {
           <div className="sm:col-span-2">
             <InputField id="org-description" label="Short description" value={form.description} onChange={value => update("description", value)} placeholder="What this organization serves or coordinates" />
           </div>
+          <div className="sm:col-span-2">
+            <InputField
+              id="org-join-code"
+              label="Organization join code"
+              value={form.joinCode}
+              onChange={value => update("joinCode", value.toUpperCase())}
+              helper={initial ? "Leave the existing code to keep it, or enter a new unique code." : "Optional. Leave blank to generate a code automatically."}
+              placeholder="e.g. ESK-LECTORS01"
+              autoComplete="off"
+            />
+          </div>
         </div>
         {error && <p role="alert" className="mt-5 rounded-xl bg-red-light p-4 font-semibold text-red">{error}</p>}
         <div className="mt-7 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-          <Button variant="ghost" fullWidth={false} onClick={onCancel}>Cancel</Button>
-          <Button fullWidth={false} onClick={submit}>{initial ? "Save changes" : "Create organization"}</Button>
+          <Button variant="ghost" fullWidth={false} disabled={saving} onClick={onCancel}>Cancel</Button>
+          <Button fullWidth={false} disabled={saving} onClick={() => void submit()}>{saving ? "Saving..." : initial ? "Save changes" : "Create organization"}</Button>
         </div>
       </div>
     </div>
@@ -450,17 +669,22 @@ function EventList({ admin, onCreate, onEdit }: {
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
   [admin.events, query, status])
 
-  function duplicate(id: string) {
-    const nextId = admin.duplicateEvent(id)
+  async function duplicate(id: string) {
+    const nextId = await admin.duplicateEvent(id)
     if (nextId) onEdit(nextId)
+    else if (admin.error) window.alert(admin.error)
   }
 
-  function cancel(id: string) {
-    if (window.confirm("Cancel this event? Its record will remain available.")) admin.cancelEvent(id)
+  async function cancel(id: string) {
+    if (!window.confirm("Cancel this event? Its record will remain available.")) return
+    const success = await admin.cancelEvent(id)
+    if (!success) window.alert(admin.error || "Unable to cancel this event.")
   }
 
-  function remove(id: string) {
-    if (window.confirm("Permanently delete this event? This action cannot be undone.")) admin.deleteEvent(id)
+  async function remove(id: string) {
+    if (!window.confirm("Permanently delete this event? This action cannot be undone.")) return
+    const success = await admin.deleteEvent(id)
+    if (!success) window.alert(admin.error || "Unable to delete this event.")
   }
 
   return (
@@ -509,11 +733,11 @@ function EventList({ admin, onCreate, onEdit }: {
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                     <Button variant="secondary" size="compact" onClick={() => onEdit(event.id)} className="w-full sm:w-auto">Edit</Button>
-                    <Button variant="secondary" size="compact" onClick={() => duplicate(event.id)} className="w-full sm:w-auto">Duplicate</Button>
+                    <Button variant="secondary" size="compact" onClick={() => void duplicate(event.id)} className="w-full sm:w-auto">Duplicate</Button>
                     {event.status !== "cancelled" && (
-                      <Button variant="secondary" size="compact" onClick={() => cancel(event.id)} className="w-full whitespace-nowrap sm:w-auto">Cancel event</Button>
+                      <Button variant="secondary" size="compact" onClick={() => void cancel(event.id)} className="w-full whitespace-nowrap sm:w-auto">Cancel event</Button>
                     )}
-                    <Button variant="danger" size="compact" onClick={() => remove(event.id)} className="w-full sm:w-auto">Delete</Button>
+                    <Button variant="danger" size="compact" onClick={() => void remove(event.id)} className="w-full sm:w-auto">Delete</Button>
                   </div>
                 </div>
               </div>
@@ -538,6 +762,7 @@ function EventForm({ initial, organizationId, admin, onCancel, onSaved }: {
   const defaultOrganization = organizationId || initial?.organizationId || activeOrganizations[0]?.id || ""
   const [form, setForm] = useState<EventDraft>(initial ?? emptyEvent(defaultOrganization))
   const [error, setError] = useState("")
+  const [saving, setSaving] = useState(false)
   const conflict = admin.findConflict(form, initial?.id)
 
   function update<K extends keyof EventDraft>(field: K, value: EventDraft[K]) {
@@ -545,7 +770,7 @@ function EventForm({ initial, organizationId, admin, onCancel, onSaved }: {
     setError("")
   }
 
-  function submit(status: "draft" | "published") {
+  async function submit(status: "draft" | "published") {
     if (!form.organizationId || !form.title.trim() || !form.startsAt || !form.endsAt || !form.location.trim()) {
       setError("Organization, title, start, end, and location are required.")
       return
@@ -558,12 +783,32 @@ function EventForm({ initial, organizationId, admin, onCancel, onSaved }: {
       setError("Registration must close before the event starts.")
       return
     }
-    if (form.capacity < 1) {
-      setError("Capacity must be at least 1.")
+    if (!Number.isInteger(form.capacity) || form.capacity < 1) {
+      setError("Capacity must be a whole number of at least 1.")
       return
     }
-    admin.saveEvent({ ...form, status }, initial?.id)
-    onSaved()
+    if (form.recurrence !== "none" && !form.repeatUntil) {
+      setError("Repeat until is required for recurring events.")
+      return
+    }
+
+    setSaving(true)
+    setError("")
+    try {
+      const conflictResult = await admin.checkEventConflict({ ...form, status }, initial?.id)
+      if (conflictResult.conflict && conflictResult.event) {
+        const proceed = window.confirm(
+          `This event overlaps with "${conflictResult.event.title}" at ${conflictResult.event.location}. Save anyway?`,
+        )
+        if (!proceed) return
+      }
+      await admin.saveEvent({ ...form, status }, initial?.id)
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save the event.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -637,11 +882,177 @@ function EventForm({ initial, organizationId, admin, onCancel, onSaved }: {
         )}
         {error && <p role="alert" className="mt-5 rounded-xl bg-red-light p-4 font-semibold text-red">{error}</p>}
         <div className="mt-7 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-          <Button variant="ghost" fullWidth={false} onClick={onCancel}>Cancel</Button>
-          <Button variant="secondary" fullWidth={false} onClick={() => submit("draft")}>Save as draft</Button>
-          <Button fullWidth={false} onClick={() => submit("published")}>Publish event</Button>
+          <Button variant="ghost" fullWidth={false} disabled={saving} onClick={onCancel}>Cancel</Button>
+          <Button variant="secondary" fullWidth={false} disabled={saving || activeOrganizations.length === 0} onClick={() => void submit("draft")}>{saving ? "Saving..." : "Save as draft"}</Button>
+          <Button fullWidth={false} disabled={saving || activeOrganizations.length === 0} onClick={() => void submit("published")}>{saving ? "Saving..." : "Publish event"}</Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+
+function JoinByCodeSection({ admin }: { admin: ReturnType<typeof useAdmin> }) {
+  const [joinCode, setJoinCode] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
+
+  async function join() {
+    if (!joinCode.trim()) {
+      setError("Enter the join code given to you by the organization.")
+      return
+    }
+    setBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const result = await admin.joinOrganizationByCode(joinCode)
+      setMessage(result.message)
+      setJoinCode("")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to join this organization.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <AdminHeader
+        title="Join an organization"
+        description="Enter a valid code to add your administrator account to an active organization."
+      />
+      <section className="rounded-2xl border border-border bg-white p-5 shadow-sm sm:p-6">
+        <form className="flex flex-col gap-4 sm:flex-row sm:items-end" onSubmit={event => { event.preventDefault(); void join() }}>
+          <div className="min-w-0 flex-1">
+            <InputField
+              id="admin-join-code"
+              label="Organization join code"
+              value={joinCode}
+              onChange={value => { setJoinCode(value.toUpperCase()); setError(""); setMessage("") }}
+              placeholder="Enter code, e.g. ESK-3205A00311A"
+              autoComplete="off"
+            />
+          </div>
+          <Button fullWidth={false} disabled={busy} type="submit">
+            {busy ? "Joining..." : "Join organization"}
+          </Button>
+        </form>
+        {error && <p role="alert" className="mt-4 rounded-xl bg-red-light p-3 text-sm font-semibold text-red">{error}</p>}
+        {message && <p role="status" className="mt-4 rounded-xl bg-green-light p-3 text-sm font-semibold text-green">{message}</p>}
+      </section>
+      <section className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+        <h2 className="text-xl font-bold text-text">Organizations you have joined</h2>
+        {admin.myOrganizations.length ? (
+          <div className="mt-4 divide-y divide-border">
+            {admin.myOrganizations.map(organization => (
+              <div key={organization.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold text-text">{organization.name}</p>
+                  <p className="text-sm text-muted">{organization.category}</p>
+                </div>
+                <span className="font-mono text-sm font-bold text-navy">{organization.joinCode}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-muted">You have not joined any organizations yet.</p>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function JoinRequestsSection({ admin }: { admin: ReturnType<typeof useAdmin> }) {
+  const [status, setStatus] = useState<"all" | JoinRequestStatus>("pending")
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState("")
+
+  const requests = admin.joinRequests.filter(item => status === "all" || item.status === status)
+
+  async function decide(request: OrganizationJoinRequest, decision: "approved" | "rejected") {
+    let note = ""
+    if (decision === "rejected") {
+      const value = window.prompt("Optional reason for rejecting this request:", "")
+      if (value === null) return
+      note = value.trim()
+    } else if (!window.confirm(\`Approve \${request.memberName}'s request to join \${request.organizationName}?\`)) {
+      return
+    }
+
+    setBusyId(request.id)
+    setError("")
+    const success = await admin.reviewJoinRequest(request.id, decision, note)
+    if (!success) setError(admin.error || "Unable to update the join request.")
+    setBusyId(null)
+  }
+
+  async function remove(request: OrganizationJoinRequest) {
+    if (!window.confirm(\`Delete the join request from \${request.memberName}?\`)) return
+    setBusyId(request.id)
+    setError("")
+    const success = await admin.deleteJoinRequest(request.id)
+    if (!success) setError(admin.error || "Unable to delete the join request.")
+    setBusyId(null)
+  }
+
+  return (
+    <div className="space-y-6">
+      <AdminHeader
+        title="Member join requests"
+        description="Review requests submitted using organization join codes."
+      />
+      <section className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+        <p className="text-sm font-semibold text-text">Filter requests</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(["pending", "approved", "rejected", "all"] as const).map(value => (
+            <Button
+              key={value}
+              variant={status === value ? "tabActive" : "tabInactive"}
+              size="compact"
+              fullWidth={false}
+              onClick={() => setStatus(value)}
+              className="capitalize"
+            >
+              {value}
+            </Button>
+          ))}
+        </div>
+      </section>
+      {error && <p role="alert" className="rounded-xl bg-red-light p-4 text-sm font-semibold text-red">{error}</p>}
+      {requests.length ? (
+        <div className="space-y-3">
+          {requests.map(request => (
+            <article key={request.id} className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-lg font-bold text-text">{request.memberName}</p>
+                  <p className="mt-1 text-sm font-semibold text-navy">{request.organizationName}</p>
+                  <p className="mt-1 text-sm text-muted">Code: <span className="font-mono">{request.submittedJoinCode}</span></p>
+                  <p className="mt-1 text-sm text-muted">Submitted {formatDateTime(request.requestedAt)}</p>
+                  {request.reviewedAt && <p className="mt-1 text-sm text-muted">Reviewed {formatDateTime(request.reviewedAt)}</p>}
+                  {request.reviewerNote && (
+                    <p className="mt-3 rounded-lg bg-bg p-3 text-sm text-text">Administrator note: {request.reviewerNote}</p>
+                  )}
+                </div>
+                <div className="flex flex-col items-start gap-3 sm:items-end">
+                  <StatusBadge status={request.status} />
+                  {request.status === "pending" && (
+                    <div className="flex gap-2">
+                      <Button size="compact" fullWidth={false} disabled={busyId !== null} onClick={() => void decide(request, "approved")}>Approve</Button>
+                      <Button variant="danger" size="compact" fullWidth={false} disabled={busyId !== null} onClick={() => void decide(request, "rejected")}>Reject</Button>
+                    </div>
+                  )}
+                  <Button variant="ghost" size="compact" fullWidth={false} disabled={busyId !== null} onClick={() => void remove(request)}>Delete request</Button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No join requests" detail={status === "pending" ? "There are no requests waiting for review." : "No requests match this status."} />
+      )}
     </div>
   )
 }
@@ -668,9 +1079,9 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
       <OrganizationForm
         initial={initial}
         onCancel={() => openSection("organizations")}
-        onSave={(draft, id) => {
-          const result = admin.saveOrganization(draft, id)
-          if (result.ok && result.id) setView({ name: "organization", id: result.id })
+        onSave={async (draft, id) => {
+          const result = await admin.saveOrganization(draft, id)
+          if (result.ok) setView({ name: "organization", id: result.id })
           return result
         }}
       />
@@ -714,6 +1125,10 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
         onOpen={id => setView({ name: "organization", id })}
       />
     )
+  } else if (view.name === "section" && view.section === "join") {
+    content = <JoinByCodeSection admin={admin} />
+  } else if (view.name === "section" && view.section === "join-requests") {
+    content = <JoinRequestsSection admin={admin} />
   } else {
     content = (
       <EventList
@@ -737,7 +1152,7 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
           <div className="px-3"><AdminBrand /></div>
           <div className="mx-3 mt-6 h-px bg-white/15" />
           <div className="mt-9 flex flex-1 flex-col gap-2">
-            {(["dashboard", "organizations", "events"] as AdminSection[]).map(section => (
+            {(["dashboard", "organizations", "events", "join", "join-requests"] as AdminSection[]).map(section => (
               <Button
                 key={section}
                 variant="ghost"
@@ -745,7 +1160,7 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
                 onClick={() => openSection(section)}
                 className={`justify-start capitalize ${activeSection === section ? "bg-white text-navy" : "text-white hover:bg-white/10"}`}
               >
-                {section}
+                {section === "join-requests" ? "Join requests" : section === "join" ? "Join by code" : section}
               </Button>
             ))}
           </div>
@@ -756,11 +1171,24 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
           </div>
         </aside>
         <main className="min-w-0 flex-1 px-4 pb-28 pt-6 sm:px-7 lg:px-10 lg:py-9">
-          <div className="mx-auto max-w-6xl">{content}</div>
+          <div className="mx-auto max-w-6xl">
+            {admin.error && (
+              <div role="alert" className="mb-5 flex flex-col gap-3 rounded-xl bg-red-light p-4 text-sm font-semibold text-red sm:flex-row sm:items-center sm:justify-between">
+                <p>{admin.error}</p>
+                <Button variant="secondary" size="compact" fullWidth={false} onClick={() => void admin.refresh()}>Retry</Button>
+              </div>
+            )}
+            {admin.loading ? (
+              <div className="rounded-2xl border border-border bg-white p-10 text-center">
+                <p className="font-semibold text-navy">Loading admin data...</p>
+                <p className="mt-2 text-sm text-muted">Connecting to the E-Skedyul backend.</p>
+              </div>
+            ) : content}
+          </div>
         </main>
       </div>
-      <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-3 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-xl backdrop-blur-xl backdrop-saturate-150 lg:hidden">
-        {(["dashboard", "organizations", "events"] as AdminSection[]).map(section => (
+      <nav className="fixed bottom-3 left-3 right-3 z-40 grid grid-cols-5 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-xl backdrop-blur-xl backdrop-saturate-150 lg:hidden">
+        {(["dashboard", "organizations", "events", "join", "join-requests"] as AdminSection[]).map(section => (
           <Button
             key={section}
             variant="ghost"
@@ -774,7 +1202,7 @@ export function AdminScreen({ onLogout }: { onLogout: () => void }) {
                 : "text-muted hover:bg-bg hover:text-navy"
             }`}
           >
-            {section}
+            {section === "join-requests" ? "Requests" : section === "join" ? "Join" : section}
           </Button>
         ))}
       </nav>
