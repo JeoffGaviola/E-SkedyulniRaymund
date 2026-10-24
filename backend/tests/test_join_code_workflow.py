@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from admin.core.errors import ConflictError, NotFoundError
 from admin.database import Base
 from admin.models.admin_profile import AdminProfile
+from admin.models.member_profile import MemberProfile
+from admin.models.organization_member_account import OrganizationMemberAccount
 from admin.models.organization import Organization
 from admin.schemas.join_request import JoinRequestDecisionRequest, PublicJoinRequestCreate
 from admin.services.organization_join_request_service import OrganizationJoinRequestService
@@ -94,12 +96,13 @@ def test_assignable_admins_excludes_existing_members(session):
     assert all(row["userId"] != str(target.user_id) for row in candidates_after)
 
 
-def test_public_member_can_submit_request_and_admin_can_approve(session):
+def test_anonymous_request_approval_records_decision_without_creating_membership(session):
     admin = session.query(AdminProfile).filter_by(username="test-admin").one()
     service = OrganizationJoinRequestService(session)
     request = service.create(PublicJoinRequestCreate(memberName="  Alex   Santos ", joinCode=" esk-active01 "))
     assert request.organization_id == "org-active"
     assert request.member_name == "Alex Santos"
+    assert request.member_user_id is None
     assert request.status == "pending"
 
     reviewed = service.decide(
@@ -110,6 +113,72 @@ def test_public_member_can_submit_request_and_admin_can_approve(session):
     assert reviewed.status == "approved"
     assert reviewed.reviewer_note == "Welcome."
     assert reviewed.reviewed_by == admin.user_id
+    assert session.query(OrganizationMemberAccount).filter_by(
+        organization_id="org-active"
+    ).count() == 0
+
+
+def test_authenticated_member_request_approval_creates_membership(session):
+    admin = session.query(AdminProfile).filter_by(username="test-admin").one()
+    member_user_id = uuid4()
+    service = OrganizationJoinRequestService(session)
+
+    request = service.create(
+        PublicJoinRequestCreate(memberName="Jordan Lee", joinCode="ESK-ACTIVE01"),
+        member_user_id=member_user_id,
+        member_email="jordan@example.com",
+        member_full_name="Jordan Lee",
+    )
+    assert request.member_user_id == member_user_id
+    member_profile = session.get(MemberProfile, member_user_id)
+    assert member_profile is not None
+    assert member_profile.email == "jordan@example.com"
+
+    reviewed = service.decide(
+        request.id,
+        JoinRequestDecisionRequest(decision="approved", note="Welcome."),
+        admin.user_id,
+    )
+    assert reviewed.status == "approved"
+
+    membership = session.get(OrganizationMemberAccount, ("org-active", member_user_id))
+    assert membership is not None
+    assert membership.organization_id == "org-active"
+    assert membership.user_id == member_user_id
+
+
+def test_authenticated_member_cannot_create_two_pending_requests(session):
+    member_user_id = uuid4()
+    service = OrganizationJoinRequestService(session)
+    service.create(
+        PublicJoinRequestCreate(memberName="Jordan Lee", joinCode="ESK-ACTIVE01"),
+        member_user_id=member_user_id,
+        member_email="jordan@example.com",
+        member_full_name="Jordan Lee",
+    )
+
+    with pytest.raises(ConflictError, match="pending request"):
+        service.create(
+            PublicJoinRequestCreate(memberName="Jordan Lee Changed", joinCode="ESK-ACTIVE01"),
+            member_user_id=member_user_id,
+            member_email="jordan@example.com",
+            member_full_name="Jordan Lee",
+        )
+
+
+def test_two_authenticated_members_with_same_name_can_request_membership(session):
+    service = OrganizationJoinRequestService(session)
+    for email in ("alex1@example.com", "alex2@example.com"):
+        service.create(
+            PublicJoinRequestCreate(memberName="Alex Santos", joinCode="ESK-ACTIVE01"),
+            member_user_id=uuid4(),
+            member_email=email,
+            member_full_name="Alex Santos",
+        )
+
+    assert session.query(OrganizationJoinRequest).filter_by(
+        organization_id="org-active", status="pending"
+    ).count() == 2
 
 
 def test_public_member_cannot_submit_using_inactive_organization_code(session):
