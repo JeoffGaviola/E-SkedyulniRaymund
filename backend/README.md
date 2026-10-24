@@ -66,6 +66,7 @@ Additional endpoints:
 - POST /public/organizations/validate-join-code
 - POST /admin/organizations/{organization_id}/regenerate-join-code
 - GET /admin/organizations/{organization_id}/members
+- GET /admin/organizations/{organization_id}/assignable-administrators to list active admins not already assigned
 - POST /admin/organizations/{organization_id}/members/{user_id} to assign an existing active admin profile to an organization
 - DELETE /admin/organizations/{organization_id}/members/{user_id} to remove that administrator membership
 - DELETE /admin/join-requests/{request_id} to remove a join request
