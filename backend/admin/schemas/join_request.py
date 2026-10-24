@@ -70,6 +70,19 @@ class OrganizationJoinRequestResponse(BaseModel):
     message: str
 
 
+class PublicJoinRequestCreatedResponse(BaseModel):
+    id: str
+    organizationId: str
+    organizationName: str
+    memberName: str
+    submittedJoinCode: str
+    status: JoinRequestStatus
+    requestedAt: str
+    reviewedAt: str | None
+    reviewerNote: str
+    message: str
+
+
 class PublicJoinRequestStatusResponse(BaseModel):
     id: str
     organizationName: str
