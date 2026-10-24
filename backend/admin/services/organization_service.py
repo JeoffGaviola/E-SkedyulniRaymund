@@ -24,11 +24,7 @@ class OrganizationService:
     def get(self, organization_id):
         return self.repo.get(organization_id)
 
-    def _unique_join_code(
-        self,
-        requested_code: str | None,
-        exclude_id: str | None = None,
-    ) -> str:
+    def _unique_join_code(self, requested_code: str | None, exclude_id: str | None = None) -> str:
         if requested_code:
             code = normalize_join_code(requested_code)
             if self.repo.join_code_exists(code, exclude_id):
@@ -65,20 +61,16 @@ class OrganizationService:
             self.session.commit()
         except IntegrityError as exc:
             self.session.rollback()
-            raise ConflictError(
-                "The organization name or join code is already in use."
-            ) from exc
+            raise ConflictError("The organization name or join code is already in use.") from exc
         self.session.refresh(item)
         return item
 
     def update(self, organization_id, data: OrganizationUpdate):
         item = self.repo.get(organization_id)
-
         if self.repo.name_exists(data.name, organization_id):
             raise_duplicate("An organization with this name already exists.")
 
         get_zone(data.timezone)
-
         item.name = data.name.strip()
         item.description = data.description.strip()
         item.contact_email = str(data.contactEmail)
@@ -88,21 +80,15 @@ class OrganizationService:
         item.category = data.category.strip() or "General"
         item.status = data.status
 
-        # A blank/null joinCode means keep the current code.
+        # Blank/null means keep the current code during a normal edit.
         if data.joinCode:
-            item.join_code = self._unique_join_code(
-                data.joinCode,
-                exclude_id=organization_id,
-            )
+            item.join_code = self._unique_join_code(data.joinCode, exclude_id=organization_id)
 
         try:
             self.session.commit()
         except IntegrityError as exc:
             self.session.rollback()
-            raise ConflictError(
-                "The organization name or join code is already in use."
-            ) from exc
-
+            raise ConflictError("The organization name or join code is already in use.") from exc
         self.session.refresh(item)
         return item
 
@@ -113,9 +99,7 @@ class OrganizationService:
             self.session.commit()
         except IntegrityError as exc:
             self.session.rollback()
-            raise ConflictError(
-                "Unable to generate a unique join code. Please try again."
-            ) from exc
+            raise ConflictError("Unable to generate a unique join code. Please try again.") from exc
         self.session.refresh(item)
         return item
 
