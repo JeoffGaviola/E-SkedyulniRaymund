@@ -2,7 +2,11 @@ from fastapi import APIRouter
 
 from ..config import Settings
 from ..database import Database
-from ..schemas.join_request import PublicJoinRequestCreate, PublicJoinRequestStatusResponse
+from ..schemas.join_request import (
+    PublicJoinRequestCreate,
+    PublicJoinRequestCreatedResponse,
+    PublicJoinRequestStatusResponse,
+)
 from ..services.organization_join_request_service import OrganizationJoinRequestService
 
 router = APIRouter(prefix="/public/join-requests", tags=["Public Join Requests"])
@@ -10,7 +14,7 @@ settings = Settings.from_env()
 database = Database(settings.database_url)
 
 
-def to_public_response(request):
+def to_public_status_response(request):
     return {
         "id": request.id,
         "organizationName": request.organization.name,
@@ -26,16 +30,25 @@ def to_public_response(request):
     }
 
 
-@router.post("", response_model=PublicJoinRequestStatusResponse, status_code=201)
+def to_created_response(request):
+    return {
+        **to_public_status_response(request),
+        "organizationId": request.organization_id,
+        "memberName": request.member_name,
+        "submittedJoinCode": request.submitted_join_code,
+    }
+
+
+@router.post("", response_model=PublicJoinRequestCreatedResponse, status_code=201)
 def create_join_request(data: PublicJoinRequestCreate):
     with database.session() as session:
         request = OrganizationJoinRequestService(session).create(data)
         session.refresh(request)
-        return to_public_response(request)
+        return to_created_response(request)
 
 
 @router.get("/{request_id}", response_model=PublicJoinRequestStatusResponse)
 def get_join_request_status(request_id: str):
     with database.session() as session:
         request = OrganizationJoinRequestService(session).get_public_status(request_id)
-        return to_public_response(request)
+        return to_public_status_response(request)
