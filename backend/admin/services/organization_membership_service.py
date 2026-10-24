@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -75,6 +75,40 @@ class OrganizationMembershipService:
                 "message": "Administrator membership.",
             }
             for membership, profile in rows
+        ]
+
+    def list_assignable_admins(self, organization_id: str, query: str | None = None):
+        self.organizations.get(organization_id)
+        assigned_ids = select(OrganizationMembership.user_id).where(
+            OrganizationMembership.organization_id == organization_id
+        )
+        statement = (
+            select(AdminProfile)
+            .where(
+                AdminProfile.active.is_(True),
+                AdminProfile.role == "admin",
+                AdminProfile.user_id.not_in(assigned_ids),
+            )
+            .order_by(AdminProfile.username.asc())
+        )
+        if query and query.strip():
+            pattern = f"%{query.strip()}%"
+            statement = statement.where(
+                or_(
+                    AdminProfile.username.ilike(pattern),
+                    AdminProfile.email.ilike(pattern),
+                    AdminProfile.full_name.ilike(pattern),
+                )
+            )
+        profiles = self.session.scalars(statement)
+        return [
+            {
+                "userId": str(profile.user_id),
+                "username": profile.username,
+                "email": profile.email,
+                "fullName": profile.full_name,
+            }
+            for profile in profiles
         ]
 
     def assign_member(self, organization_id: str, user_id: UUID):
