@@ -1,53 +1,64 @@
-# E-Skedyul Admin Frontend to Supabase Backend
+# Admin Frontend-to-Backend Mapping
 
-The `UI-Testing` branch already contains the React admin UI under `src/features/admin/`. This backend keeps its existing data model and exposes API payloads using the camelCase field names used by the frontend types.
+This document describes the Admin API integration present in this branch. It is not a description of the separate Wizard, Account, or Management frontend modules.
 
-## Current frontend fields
+## Request flow
 
-Organization:
-`id`, `name`, `description`, `contactEmail`, `phone`, `timezone`, `address`, `category`, `status`, `createdAt`
+React Admin frontend -> shared `src/lib/api.ts` helper -> FastAPI -> Supabase Auth / Supabase PostgreSQL.
 
-Event:
-`id`, `organizationId`, `title`, `description`, `startsAt`, `endsAt`, `location`, `capacity`, `registrationDeadline`, `visibility`, `recurrence`, `repeatUntil`, `status`, `createdAt`
+- `src/features/admin/login.tsx` submits the username and password to `POST /admin/auth/login`.
+- The backend finds an active Admin profile, authenticates its email through Supabase Auth, and returns the access token and administrator identity.
+- `src/lib/api.ts` adds the Bearer token to protected requests and clears it when a request returns HTTP 401.
+- `src/features/admin/useAdmin.ts` loads initial data from `GET /admin/dashboard/bootstrap` and calls the API for Admin operations.
 
-## Endpoints
+## Endpoint groups
 
-`POST /admin/auth/login`
+### Authentication and dashboard
 
-`GET /admin/dashboard`
+- `POST /admin/auth/login`
+- `POST /admin/auth/logout`
+- `GET /admin/dashboard`
+- `GET /admin/dashboard/bootstrap`
 
-`GET /admin/organizations`
-`POST /admin/organizations`
-`GET /admin/organizations/{id}`
-`PUT /admin/organizations/{id}`
-`PATCH /admin/organizations/{id}/toggle-status`
-`DELETE /admin/organizations/{id}`
+### Organizations
 
-`GET /admin/events`
-`POST /admin/events`
-`GET /admin/events/{id}`
-`PUT /admin/events/{id}`
-`POST /admin/events/{id}/duplicate`
-`POST /admin/events/{id}/cancel`
-`DELETE /admin/events/{id}`
-`POST /admin/events/conflicts`
+- `GET /admin/organizations`
+- `POST /admin/organizations`
+- `GET /admin/organizations/{organization_id}`
+- `PUT /admin/organizations/{organization_id}`
+- `PATCH /admin/organizations/{organization_id}/toggle-status`
+- `DELETE /admin/organizations/{organization_id}`
+- `POST /admin/organizations/{organization_id}/regenerate-join-code`
+- `GET /admin/organizations/{organization_id}/members`
+- `GET /admin/organizations/{organization_id}/assignable-administrators`
+- `POST /admin/organizations/{organization_id}/members/{user_id}`
+- `DELETE /admin/organizations/{organization_id}/members/{user_id}`
 
-Event date/time inputs and outputs use organization-local wall time in
-`YYYY-MM-DDTHH:mm` form (with seconds only when present). `repeatUntil` uses
-the date-only `YYYY-MM-DD` form expected by the frontend date input. Conflict
-checks accept the event draft plus an optional `excludeId` and return
-`{ "conflict": boolean, "event": AdminEvent | null }`.
+### Events
 
-Protected endpoints use `Authorization: Bearer <Supabase access token>`.
+- `GET /admin/events`
+- `POST /admin/events`
+- `GET /admin/events/{event_id}`
+- `PUT /admin/events/{event_id}`
+- `POST /admin/events/{event_id}/duplicate`
+- `POST /admin/events/{event_id}/cancel`
+- `DELETE /admin/events/{event_id}`
+- `POST /admin/events/conflicts`
 
-## Supabase architecture
+Event datetimes are interpreted in the organization's configured time zone. API responses use the camelCase fields defined in `src/features/admin/types.ts`.
 
-React frontend -> Supabase Auth -> Supabase access token -> FastAPI -> Supabase PostgreSQL
+### Join requests
 
-The backend validates the supplied Supabase access token with Supabase Auth, then checks `public.admin_profiles` before allowing admin operations. Supabase PostgreSQL stores organizations and events. RLS policies are included in `schema.sql`.
+- `POST /public/join-requests` submits a request using a member name and join code.
+- `GET /public/join-requests/{request_id}` returns its status.
+- `GET /admin/join-requests?status={pending|approved|rejected|all}` lists requests for administrators.
+- `PATCH /admin/join-requests/{request_id}/decision` records approval or rejection.
+- `DELETE /admin/join-requests/{request_id}` deletes a request.
 
-The Supabase secret key is server-only. It is used only by `scripts/create_admin.py` for the trusted administrator bootstrap flow.
+**Important limitation:** approval currently records the decision, reviewer, timestamp, and optional note. It does not create a verified member account or organization membership because the request does not contain an authenticated member identity and the existing membership model references Admin profiles. Member account and membership creation requires a separate member identity model and member-side integration.
 
-## Important frontend note
+## Configuration and local checks
 
-The current `UI-Testing` frontend still has local admin state in `src/features/admin/useAdmin.ts` and hardcoded demo credentials in `src/features/admin/login.tsx`. The backend retains Supabase-backed authentication and does not add a demo-credential bypass. To complete live integration, those files should call the endpoints above and use a browser Supabase client for the user session.
+Copy `backend/.env.example` to `backend/.env`, configure Supabase/database credentials, and set `VITE_API_URL` in the frontend environment if the backend is not running at `http://127.0.0.1:8000`. Keep actual credentials out of Git.
+
+Run `pnpm exec tsc --noEmit` and `pnpm build` from the repository root. Run `python -m pytest` from the `backend` directory.
