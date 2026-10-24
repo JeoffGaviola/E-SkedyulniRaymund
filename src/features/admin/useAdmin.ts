@@ -369,7 +369,6 @@ export function useAdmin() {
     duplicateEvent,
     cancelEvent,
     deleteEvent,
-    joinOrganizationByCode,
     joinOrganization,
     listOrganizationMembers,
     listAssignableAdmins,
