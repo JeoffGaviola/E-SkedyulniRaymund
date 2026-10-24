@@ -137,11 +137,12 @@ function EmptyState({ title, detail, action }: { title: string; detail: string; 
   )
 }
 
-function Dashboard({ admin, onOrganizations, onEvents, onCreateEvent }: {
+function Dashboard({ admin, onOrganizations, onEvents, onCreateEvent, memberDashboard }: {
   admin: ReturnType<typeof useAdmin>
   onOrganizations: () => void
   onEvents: () => void
   onCreateEvent: () => void
+  memberDashboard: React.ReactNode
 }) {
   const nextEvents = admin.events
     .filter(event => event.status === "published")
