@@ -55,7 +55,9 @@ Event datetimes are interpreted in the organization's configured time zone. API 
 - `PATCH /admin/join-requests/{request_id}/decision` records approval or rejection.
 - `DELETE /admin/join-requests/{request_id}` deletes a request.
 
-**Important limitation:** approval currently records the decision, reviewer, timestamp, and optional note. It does not create a verified member account or organization membership because the request does not contain an authenticated member identity and the existing membership model references Admin profiles. Member account and membership creation requires a separate member identity model and member-side integration.
+**Member approval behavior:** `organization_members` is reserved for administrator assignments. Ordinary members use `member_profiles` and `organization_member_accounts`. The public join-request endpoint continues to support anonymous submissions, but those requests only record a decision when approved. If a request includes a valid Supabase member access token in its `Authorization: Bearer` header, the backend links it to the authenticated member, and approval creates an `organization_member_accounts` membership transactionally. The Wizard frontend must send the authenticated member token to benefit from this flow. Requests are never associated with a user ID submitted in the JSON body.
+
+For an existing database that already ran the original schema and migration 001, run `backend/migrations/002_member_identity_and_memberships.sql`. For new installations, use the updated `backend/schema.sql`.
 
 ## Configuration and local checks
 
