@@ -61,7 +61,7 @@ export async function getJoinRequestStatus(
   }
 
   return apiRequest<PublicJoinRequestStatus>(
-    \`/public/join-requests/\${encodeURIComponent(requestId)}\`,
+    `/public/join-requests/${encodeURIComponent(requestId)}`,
     { method: "GET" },
     false,
   )
