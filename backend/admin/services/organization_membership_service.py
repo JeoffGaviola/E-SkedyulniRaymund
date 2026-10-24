@@ -1,51 +1,39 @@
-
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.errors import ConflictError
+from ..models.admin_profile import AdminProfile
+from ..models.organization import Organization
 from ..models.organization_membership import OrganizationMembership
-from ..repositories.organization_membership_repository import (
-    OrganizationMembershipRepository,
-)
-from ..repositories.organization_repository import (
-    OrganizationRepository,
-)
+from ..repositories.organization_membership_repository import OrganizationMembershipRepository
+from ..repositories.organization_repository import OrganizationRepository
 
 
 class OrganizationMembershipService:
-    """Business rules for joining organizations."""
+    """Membership operations for administrator accounts."""
 
     def __init__(self, session: Session):
         self.session = session
         self.organizations = OrganizationRepository(session)
         self.memberships = OrganizationMembershipRepository(session)
 
-    def join(
-        self,
-        organization_id: str,
-        user_id: UUID,
-    ):
+    def join(self, organization_id: str, user_id: UUID):
         organization = self.organizations.get(organization_id)
-
         if organization.status != "active":
-            raise ConflictError(
-                "You can only join an active organization."
-            )
+            raise ConflictError("You can only join an active organization.")
 
         if self.memberships.get(organization_id, user_id):
-            raise ConflictError(
-                "You have already joined this organization."
-            )
+            raise ConflictError("You have already joined this organization.")
 
         membership = OrganizationMembership(
             organization_id=organization_id,
             user_id=user_id,
             joined_at=datetime.now(timezone.utc),
         )
-
         self.memberships.add(membership)
 
         try:
@@ -57,18 +45,50 @@ class OrganizationMembershipService:
             ) from exc
 
         self.session.refresh(membership)
-
         return organization, membership
+
+    def join_by_code(self, join_code: str, user_id: UUID):
+        organization = self.organizations.by_join_code(join_code.strip().upper())
+        if not organization:
+            raise ConflictError("The join code is invalid.")
+        return self.join(organization.id, user_id)
 
     def mine(self, user_id: UUID):
         return self.memberships.list_for_user(user_id)
 
-    def available(
-        self,
-        user_id: UUID,
-        query: str | None = None,
-    ):
-        return self.memberships.list_available_for_user(
-            user_id,
-            query,
+    def available(self, user_id: UUID, query: str | None = None):
+        return self.memberships.list_available_for_user(user_id, query)
+
+    def list_members(self, organization_id: str):
+        self.organizations.get(organization_id)
+        statement = (
+            select(OrganizationMembership, AdminProfile)
+            .join(
+                AdminProfile,
+                AdminProfile.user_id == OrganizationMembership.user_id,
+            )
+            .where(OrganizationMembership.organization_id == organization_id)
+            .order_by(AdminProfile.username.asc())
         )
+        rows = self.session.execute(statement).all()
+        return [
+            {
+                "organizationId": membership.organization_id,
+                "organizationName": self.organizations.get(organization_id).name,
+                "userId": str(profile.user_id),
+                "username": profile.username,
+                "email": profile.email,
+                "fullName": profile.full_name,
+                "joinedAt": membership.joined_at.isoformat(),
+                "message": "Administrator membership.",
+            }
+            for membership, profile in rows
+        ]
+
+    def remove_member(self, organization_id: str, user_id: UUID) -> None:
+        self.organizations.get(organization_id)
+        membership = self.memberships.get(organization_id, user_id)
+        if not membership:
+            raise ConflictError("This administrator is not a member of the organization.")
+        self.session.delete(membership)
+        self.session.commit()
