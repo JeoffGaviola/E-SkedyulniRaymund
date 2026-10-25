@@ -26,7 +26,7 @@ class Settings:
             "http://localhost:5173,http://127.0.0.1:5173"
         )
         origins = tuple(
-            value.strip()
+            value.strip().rstrip("/")
             for value in os.getenv("CORS_ORIGINS", default_origins).split(",")
             if value.strip()
         )
