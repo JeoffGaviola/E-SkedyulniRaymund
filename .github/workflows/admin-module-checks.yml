@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - feature/admin-module-only
+      - fix/admin-production-api-config-based-on-admin
   pull_request:
     branches:
       - main
+      - feature/admin-module-only
   workflow_dispatch:
 
 permissions:
