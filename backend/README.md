@@ -1,71 +1,77 @@
 # E-Skedyul Admin Frontend and FastAPI Backend
 
-This branch connects the Admin frontend to the FastAPI API and Supabase-backed storage.
+This repository contains the Admin frontend and its FastAPI backend integration.
 
 ## Architecture
 
-React Admin frontend -> FastAPI -> Supabase PostgreSQL
-The backend authenticates administrators with Supabase Auth and checks their active administrator profile before protected API operations.
+React Admin frontend -> FastAPI -> Supabase Auth and PostgreSQL.
 
-## Setup
+The Admin login calls `POST /admin/auth/login`, and protected requests use the returned Supabase access token.
+
+## Local setup
 
 1. Create a Supabase project.
-2. Run `schema.sql` in the Supabase SQL Editor for a new database. For an existing database, review and run `migrations/001_join_codes_and_join_requests.sql` as appropriate.
-3. Copy `.env.example` to `.env` inside the `backend` directory.
-4. Fill in `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, and the initial administrator settings. Never commit the real `.env` file or expose the Supabase secret key in browser code.
-5. From `backend`, create and activate a virtual environment, install `requirements.txt`, and create the first administrator with `python scripts/create_admin.py`.
-6. Start the API with `uvicorn admin.app:app --reload --host 127.0.0.1 --port 8000`.
-7. Set the frontend `VITE_API_URL` to the API URL if it differs from the default `http://127.0.0.1:8000`, then start the frontend using the repository's normal pnpm commands.
+2. Run `schema.sql` in the SQL Editor for a new database. For an existing database, apply the appropriate migrations in order.
+3. Copy `.env.example` to `.env` inside `backend/`.
+4. Configure `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, and initial admin settings.
+5. From `backend/`, create a virtual environment and install `requirements.txt`.
+6. Run `python scripts/create_admin.py` after the schema is ready.
+7. Start the API with `uvicorn admin.app:app --host 0.0.0.0 --port 8000` (for local-only development, `127.0.0.1` is also fine).
 
-Example PowerShell commands:
+Never commit `backend/.env` or expose `SUPABASE_SECRET_KEY` in the browser.
 
-```powershell
-cd backend
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-Copy-Item .env.example .env
+## Deploying the frontend and backend
+
+Vercel hosts the Vite frontend; it does not automatically run the FastAPI server in `backend/`. Deploy FastAPI separately to a service that supports Python ASGI applications, and configure the frontend with the public HTTPS URL of that service.
+
+In Vercel, open **Project Settings -> Environment Variables** and add:
+
+- `VITE_API_URL`: the public HTTPS base URL of the deployed FastAPI service, without a trailing slash (example placeholder: `https://your-api.example.com`).
+- Apply it to the **Production** environment (and Preview too if previews should call the API).
+
+Then redeploy the frontend so Vite can include the value in the client bundle. `VITE_API_URL` is a public frontend configuration value; do not put secrets in it. Keep the Supabase secret key and database connection string in the backend host's environment variables only.
+
+On the backend host, configure `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY`. Set `CORS_ORIGINS` to the exact origin(s) of the deployed frontend, such as the production Vercel domain and any preview domain you intend to support. Do not include a path or trailing slash in an origin. The backend must be publicly reachable over HTTPS.
+
+The default frontend API URL is intentionally **not** a production fallback. If `VITE_API_URL` is missing, Admin API calls show a clear configuration error instead of trying to contact localhost on each visitor's device.
+
+Before declaring deployment complete, open the backend health endpoint `/admin/health` and verify that the service responds and the Supabase/database configuration flags are true. This is only a configuration check; perform a real Admin login and a protected dashboard request as an end-to-end test too.
+
+## Admin login account
+
+The frontend does not hardcode the username or password. The backend authenticates through Supabase Auth and requires a matching active row in `public.admin_profiles`. Create the initial account from `backend/` with:
+
+```sh
 python scripts/create_admin.py
-uvicorn admin.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Create the database schema before creating the initial administrator. The bootstrap script requires valid Supabase credentials and a configured database URL.
+Set `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in the backend environment before running this script. It also requires `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_SECRET_KEY`. For a demo login of username `admin` and password `admin123`, those values must be configured before creating the account, or the existing account's password must be reset in Supabase Auth. Do not use that weak password for a public production service.
 
-## Admin API integration
+## Admin features and routes
 
-The Admin login calls `POST /admin/auth/login`. After authentication, the frontend stores the returned access token and sends it as a Bearer token for protected requests. Initial organization, event, and join-request data is loaded from `GET /admin/dashboard/bootstrap`.
+The API includes organization CRUD/status/join-code management, event CRUD/conflict checking/duplication/cancellation, administrator assignments, and join-request review. Routes are in `backend/admin/routes/`; business logic is in `backend/admin/services/`; API calls are in `src/features/admin/` and `src/lib/api.ts`.
 
-Other Admin endpoints cover organization CRUD and status/join-code management, event CRUD and conflict checking, organization administrator assignments, and join-request review. The API is defined in `admin/routes/`; the UI integration is in `src/features/admin/` and the shared API helper is `src/lib/api.ts`.
+## Member join-request behavior
 
-## Member identity and join-request approval
+`organization_members` is reserved for administrator-to-organization assignments. Ordinary members use `member_profiles` and `organization_member_accounts`.
 
-`organization_members` remains the administrator-assignment table, referencing `admin_profiles`. Ordinary members use the separate `member_profiles` and `organization_member_accounts` tables.
+The public join-request endpoint supports anonymous requests for compatibility. Approval of an anonymous request records the decision only. When the Wizard sends a valid Supabase member access token, the backend links the request to that member and approval creates the member's organization membership. The Wizard frontend must send the authenticated member token to use the linked flow.
 
-When `POST /public/join-requests` receives a valid Supabase member access token in the `Authorization: Bearer` header, the backend associates the request with that authenticated member. Approval creates the corresponding `organization_member_accounts` row in the same transaction as the decision. Anonymous requests remain accepted for backward compatibility, but their approval records only the decision and does not create a membership. The Wizard frontend must send the authenticated member token to use the linked flow.
+For an existing Supabase database that already uses the original schema and migration 001, run `migrations/002_member_identity_and_memberships.sql`. For a new database, use the updated `schema.sql` rather than applying incremental migrations after it.
 
-For an existing Supabase database that already has the original schema and migration 001, run `migrations/002_member_identity_and_memberships.sql` in the SQL Editor. For a new database, use the updated `schema.sql` instead of running incremental migrations after it.
+## Automated checks
 
-## Tests
+Frontend checks:
 
-From the repository root, run the frontend type check and production build:
-
-```powershell
+```sh
 pnpm install --frozen-lockfile
 pnpm exec tsc --noEmit
 pnpm build
 ```
 
-Run backend tests from the `backend` directory:
+Backend checks from `backend/`:
 
-```powershell
+```sh
 pip install -r requirements.txt
 python -m pytest
 ```
-
-The branch includes a GitHub Actions workflow to run these checks on updates to the Admin integration branch and on pull requests to `main`.
-
-## Security notes
-
-- Do not commit `backend/.env`; use `.env.example` only as a template.
-- Keep `SUPABASE_SECRET_KEY` on the server only.
-- Protect all Admin endpoints with Supabase token validation and an active Admin profile.
