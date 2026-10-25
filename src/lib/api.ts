@@ -1,6 +1,8 @@
-const API_BASE_URL = (
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
-).replace(/\/+$/, "")
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim()
+
+// Vercel serves the frontend over HTTPS; localhost points to each visitor's
+// own device, so it must never be the silent production API fallback.
+const API_BASE_URL = (configuredApiUrl || "").replace(/\/+$/, "")
 
 const ADMIN_TOKEN_KEY = "eskedyul_admin_access_token"
 export const ADMIN_UNAUTHORIZED_EVENT = "eskedyul:admin-unauthorized"
@@ -89,6 +91,12 @@ export async function apiRequest<T>(
     headers.set("Authorization", `Bearer ${token}`)
   }
 
+  if (!API_BASE_URL) {
+    throw new Error(
+      "The Admin API URL is not configured for this deployment. Set VITE_API_URL to your deployed FastAPI HTTPS URL in the Vercel project settings, then redeploy.",
+    )
+  }
+
   let response: Response
 
   try {
@@ -98,7 +106,7 @@ export async function apiRequest<T>(
     })
   } catch {
     throw new Error(
-      `Cannot connect to the E-Skedyul API at ${API_BASE_URL}. Check that the backend is running and VITE_API_URL is correct.`,
+      `Cannot connect to the E-Skedyul API at ${API_BASE_URL}. Verify that the FastAPI backend is deployed, reachable, and allows this website in CORS settings.`,
     )
   }
 
