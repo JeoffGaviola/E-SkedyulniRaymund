@@ -5,6 +5,7 @@ on:
     branches:
       - feature/admin-module-only
       - fix/admin-production-api-config-based-on-admin
+      - fix/pr22-production-conflicts
   pull_request:
     branches:
       - main
